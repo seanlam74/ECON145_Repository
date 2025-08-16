@@ -1,0 +1,590 @@
+---
+title: "EDA on World Health Statistics"
+author: "Sean Lam"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    df_print: paged
+    number_sections: yes
+    theme: readable
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+
+# 1. Understanding the Dataset
+
+## Load the Data File
+
+Now let us read the data file using "read.csv" function. We have set the argument stringAsFactors to FALSE so that any string characters will be converted to character data type instead of staying as a factor, for the 'Country' and 'Region' column in this case. Also, it is good practice to state the file path for code readability.
+
+```{r}
+getwd()
+```
+
+```{r}
+
+file_path="D:/1_Teaching_Work_Folder/_SMU_Courses/ECON145_Intro to Healthcare Analytics/2025/Aug_2025/Hands-On/Lecture 2/2. WHS - data wrangling"
+
+data <- read.csv(file.path(file_path, "cleaned_WHS_2019.csv"), stringsAsFactors = TRUE)
+```
+
+## Understand the data dictionary
+
+Understand the data dictionary by printing out the data type and sample data in each column.
+
+```{r}
+# Write a line of code to print the data dictionary
+str(data)
+```
+
+## Explore:
+
+Exploring few sample rows:
+
+```{r}
+# Print the first 5 rows in the dataset
+head(data, n=10)
+```
+
+```{r}
+#Print the  last 10 rows in the dataset
+tail(data, n=10)
+```
+
+### Questions
+
+1. How many rows are there in the dataset?
+2. How many data columns / attributes are there in the dataset? 
+3. How many numerical data columns?
+4. How many categorical data columns?
+5. Explore the first 5 rows and the last 10 rows of the dataset.
+
+### Answers: 
+
+Enter your answers here:
+
+1. 196
+2. 14
+3. 12
+4. 2
+5. Use head(data) and tail(data,n=10)
+
+
+# 2. Summary Statistics
+
+## Numerical Statistics
+
+Use **summary** 'summary' function that provides you with standard central tendency statistics for each variable in the dataframe. 
+
+**Questions:**:
+1. How many data columns have missing values? 
+2. What is the average health expenditure as a percentage of GDP?
+3. What is the median and maximum health expenditure per capital?
+4. From part (3), what kind of distribution would you suspect the health expenditure per capital could be?
+
+```{r}
+# Print summary statistics
+summary(data)
+```
+**Answers:** 
+Enter your answers here:
+
+1. 8
+2. 6.72%
+3. US Dollars 334, US Dollars 9870
+4. Perhaps right-skewed 
+
+## Graphical statistics - Histogram
+
+Use Histogram to check the shape of the distribution of the health expenditure of the countries.
+
+Histogram can be created using the hist() function in R programming language. 
+This function takes in a vector of values for which the histogram is plotted.
+Reference: https://www.rdocumentation.org/packages/graphics/versions/3.6.2/topics/hist
+
+### Step 1: Use hist() function to plot the average health expenditure as a percentage of GDP.
+```{r}
+# Start with the simplest form of the histogram function.
+hist(data$Health_Expend_of_GDP)
+```
+
+### Step 2: Add data labels to the histogram for better readability.
+```{r}
+# Add data labels
+hist(data$Health_Expend_of_GDP, labels = TRUE)
+```
+
+### Step 3: Add meaningful axis label and title to enhance interpretability.
+```{r}
+# Add meaningful axis label and title
+hist(
+  data$Health_Expend_of_GDP,
+  labels = TRUE,
+  xlab = "Health Expenditure as % of GDP",
+  main = "Histogram of Health Expenditure"
+)
+```
+### Step 4: Adjust any flaws or aesthetic features of the chart.
+```{r}
+# In this example, we can adjust the y-axis limit to ensure proper display of data labels.
+# Adjusting the y-axis limit
+hist(
+  data$Health_Expend_of_GDP,
+  labels = TRUE,
+  xlab = "Health Expenditure as % of GDP",
+  main = "Histogram of Health Expenditure",
+  ylim = range(1:60)
+)
+```
+
+### Additional Tips:
+```{r}
+# - Customize bin width: You can customize the number of bins using the 'breaks' parameter.
+# - Adjusting color: You can use the 'col' parameter to change the color of the bars.
+# - Add transparency: Use 'col' with an alpha channel (e.g., col = rgb(0.2, 0.4, 0.6, 0.7)) for transparency.
+
+# Example with customized bin width and color:
+hist(
+  data$Health_Expend_of_GDP,
+  labels = TRUE,
+  xlab = "Health Expenditure as % of GDP",
+  main = "Histogram of Health Expenditure",
+  ylim = range(1:60),
+  breaks = 20,  # Adjust the number of bins
+  col = "skyblue"  # Change the color of bars
+)
+```
+**Question:**
+Now try plotting health expenditure per capital in the histogram.
+```{r}
+hist(
+  data$Health_Exp_Per_Capita,
+  labels = TRUE,
+  xlab = "Health Expenditure per Capita",
+  main = "Histogram of Health Expenditure per Capita",
+  ylim = range(1:150)
+  )
+```
+
+## Graphical statistics - Boxplot
+We also use the boxplot to see the spread of these variables related to health expenditure by observing the interquartile ranges and lookout for potential outliers. Boxplot require a categorical variable and a numerical variable.
+
+**Explore:**
+1. Which region has the highest median health expenditure as a percentage of GDP?
+2. Which region has the highest median health expenditure per capita?
+
+### Step 1: Use boxplot() function to compare health_Expend_of_GDP across regions.
+
+```{r}
+# Boxplots are useful for observing the spread of numerical variables by different categories.
+boxplot(
+  data$Health_Expend_of_GDP ~ data$Region,
+  xlab = "Region",
+  ylab = "Health Expenditure as Percentage of GDP",
+  main = "Health Expenditure as % of GDP for Each Country by Region"
+)
+```
+
+```{r}
+# Create the boxplot and store the output
+bp <- boxplot(
+  data$Health_Expend_of_GDP ~ data$Region,
+  xlab = "Region",
+  ylab = "Health Expenditure as Percentage of GDP",
+  main = "Health Expenditure as % of GDP for Each Country by Region",
+  plot = TRUE
+)
+
+# Add labels for the IQR, whiskers, and medians
+for(i in 1:length(bp$stats[1,])) {
+  # Get the positions
+  lower_whisker <- bp$stats[1, i]
+  lower_hinge <- bp$stats[2, i]
+  median <- bp$stats[3, i]
+  upper_hinge <- bp$stats[4, i]
+  upper_whisker <- bp$stats[5, i]
+  
+  # Add text labels closer to the points (adjusting offset)
+  text(i, lower_whisker, labels = round(lower_whisker, 2), pos = 1, offset = 0.3, col = "blue") # pos = 1 places text below the point
+  text(i, lower_hinge, labels = round(lower_hinge, 2), pos = 1, offset = 0.3, col = "red")      # pos = 1 for below
+  text(i, median, labels = round(median, 2), pos = 3, offset = 0.3, col = "black")              # pos = 3 for above
+  text(i, upper_hinge, labels = round(upper_hinge, 2), pos = 3, offset = 0.3, col = "red")      # pos = 3 for above
+  text(i, upper_whisker, labels = round(upper_whisker, 2), pos = 3, offset = 0.3, col = "blue") # pos = 3 for above
+}
+
+```
+
+
+
+### Step 2: Customize the boxplot for better interpretation with readable labels.
+
+```{r}
+par(mar = c(5, 8, 4, 2) + 0.1)  # Increase left margin(2nd parameter) 
+boxplot(
+  data$Health_Expend_of_GDP ~ data$Region,
+  ylab = "",
+  xlab = "Health Expenditure as Percentage of GDP",
+  main = "Health Expenditure as % of GDP for Each Country by Region",
+  horizontal = TRUE, # plot horizontal boxplots instead
+  cex.axis = 0.8,  # Adjust font size of axis labels
+  cex.lab = 1.0,  # Adjust font size of axis titles
+  las = 2  # Rotate x-axis labels
+)
+```
+
+If some of the Region are not printed properly. Check the R documentation and set the "names" of the label we can set the name of the x-axis label  
+
+### Step 2A (Alternative): Customize the boxplot for better interpretation with readable labels.
+
+```{r}
+# Find the complete list of Regions with unique function
+unique(data$Region)
+
+# Change the names to shorter names
+boxplot(
+  data$Health_Expend_of_GDP ~ data$Region, 
+  xlab = "Region", 
+  ylab = "Health Expenditure as Percentage of GDP", 
+  main = "Health Expenditure as % of GDP for each country by Region", 
+  names=c("Africa","America","East.Med","Europe", "SE Asia", "West.Pac"))
+```
+
+**Question:**
+Plot a boxplot using Health Expenditure per Capita.
+
+```{r}
+# Boxplot using Health Expenditure per Capita
+boxplot(
+  data$Health_Exp_Per_Capita ~ data$Region, 
+  ylab = "", 
+  xlab = "Health Expenditure per Capita", 
+  main = "Health Expenditure of Countries by Region",
+  names=c("Africa","America","East.Med","Europe", "SE Asia", "West.Pac"),
+  horizontal = TRUE, # plot horizontal boxplots instead
+  cex.axis = 0.8,  # Adjust font size of axis labels
+  las = 2  # Rotate axis labels
+)
+```
+
+We can see that Eastern Mediterranean is the region which has high health expenditure.
+
+## Graphical statistics - Barplot
+We can use Bar Plots for plotting categorical data.R documentation for barplot can be found at
+https://www.rdocumentation.org/packages/graphics/versions/3.6.2/topics/barplot. 
+
+### Step 1: Get a summary table of the region and the number of countries in each region.
+
+```{r}
+region_counts <- table(data$Region)
+print(region_counts)
+```
+
+### Step 2: Plot a basic barplot.
+
+```{r}
+barplot(region_counts)
+```
+
+### Step 3: Customize the barplot with axes labels, titles, and modified axis data labels.
+
+```{r}
+barplot(
+  region_counts,
+  xlab = "Region",
+  ylab = "Number of Countries",
+  main = "Number of Countries in Each Region",
+  names.arg = c("Africa", "America", "East.Med", "Europe", "SE Asia", "West.Pac"),
+  border = "black",  # Add black borders to bars for better visibility
+  ylim = c(0, max(region_counts) + 2)  # Set the y-axis limit for better visualization
+)
+```
+
+# 3. Understanding Data Structures in R
+In R, you will work with data structures store your data or subsets of data. A data structure is the interface to data organized in computer memory. The main data structures that we will be using in our lesons are: 
+
+* Vector - 1-dimensional structure that contains data of the same data type
+* List - 1-dimensional structure that can contain data of different data types
+* Dataframe - 2-dimensional structure for storing data tables. It is also a list of vectors of equal length.
+
+
+# 4. Apply() family of Operations 
+The apply() family in the R base package is populated with functions to manipulate slices of data from these data structures. These functions allow crossing the data in a number of ways and avoid explicit use of loop constructs. They act on an input data structure and apply a named __function__ with one or several optional arguments.
+
+The called function could be an aggregating function, like for example the mean, or the sum (that return a number or scalar); or other transforming or subsetting functions; and other vectorized functions, which yield more complex structures like lists, vectors, matrices, and arrays.
+
+We are going to learn a few apply() functions which we will commonly use, namely apply(), sapply(), and tapply() functions. Check out the documentation for each of these functions.
+
+**Exploring Missing Value in Dataset**
+1. Find the proportion of missing Values in each column by using the function **is.na** which indicates if the data is missing. Use apply() and sapply() to observe the usage and output. 
+2. What is the average child mortality rate in each region? Use tapply(). 
+
+```{r}
+# Number of row of data in dataset
+n = nrow(data)
+
+# Use apply() to calculate the proportion of missing values in each column ("Margin=2" apply function to each column of the data)
+missing_proportion_apply <- apply(data, 2, function(x) sum(is.na(x)) / n)
+print("Apply() Result:")
+print(missing_proportion_apply)
+# The second argument in apply() function is called the MARGIN. MARGIN = 1 indicates apply the operation over the row, and MARGIN = 2 indicates apply the operation over the column.
+```
+
+The sapply() function works like apply() function but it tries to simplify the usage and the output to the most elementary data structure that is possible. In this case, it will just apply column-wise. 
+
+```{r}
+missing_proportion_sapply <- sapply(data, function(x) sum(is.na(x)) / n)
+print("Sapply() Result:")
+print(missing_proportion_sapply)
+```
+
+The tapply() applies a function or operation on subset of the vector broken down by a given factor variable. It applies whatever function name you put as the third argument on the value of the first argument, and then **summarizes the data by the second argument**. 
+
+```{r}
+# Use tapply() to calculate the mean child mortality rate for each region
+average_child_mortality_tapply <- tapply(data$Child_Mortality_Rate, data$Region, mean)
+print("Tapply() Result:")
+print(average_child_mortality_tapply)
+```
+
+# 5. Cleaning Missing Values
+
+## Dropping the rows with missing values
+To deal with missing values during data preparation, we can consider the following:
+5.1 Remove variables (columns) with too many missing values (e.g., more than a certain percentage) by setting the column to NULL. 
+5.2 Remove observations (rows) with missing values.
+5.3 Missing value imputation
+
+### 5.1 Remove variables (columns) with too many missing values (e.g., more than a certain percentage) by setting the column to NULL
+```{r}
+missing_threshold <- 0.07
+columns_to_remove <- colnames(data)[sapply(data, function(x) sum(is.na(x))/length(x)) > missing_threshold]
+print(columns_to_remove)
+
+# Remove columns with more than 7% missing values
+data2 <- data[, !(names(data) %in% columns_to_remove)]
+```
+
+
+### 5.2 Remove observations (rows) with missing values
+```{r}
+# Use subset method to drop the rows where Life_Expectancy_Both is NA. Save the dataframe to another variable. 
+data3 <- subset(data, !is.na(data$Life_Expectancy_Both))
+str(data)
+str(data3) # Check the number of rows remaining
+sapply(data3, function(x) sum(is.na(x))/nrow(data3)) # Check which are the other variables which still have missing data.
+
+```
+**Question**
+1. Drop the rows with NA in Life_Expectancy_Both. 
+2. What is the remaining total number of rows in the dataset after operation in (1)
+3. What other columns still contain missing data after operation in (1)?
+
+**Answer**
+1. Code: subset(data, !is.na(data$Life_Expectancy_Both))
+2. 180
+3. Health_Exp_Per_Capita and Health_Expend_of_GDP
+
+```{r}
+subset(data, !is.na(data$Life_Expectancy_Both))
+sapply(data3, function(x) sum(is.na(x))/nrow(data3)) 
+# Check which are the other variables which still have missing data.
+
+```
+
+
+### 5.3 Imputing Values to handling missing data
+Sometimes, dropping missing values may not be great for our data analysis. Instead, we can impute (replace) the missing values with the mode/mean/median. We will be demonstrating how to do this for the Health_Exp_Per_Capita column since there are still missing values in the column.
+
+Let's first examine the column "Health_Exp_Per_Capita"
+
+### Impute with Mode
+
+First, we get all the unique values in the column. R does not have a standard in-built function to calculate mode. So we create a user function to calculate mode of a data set in R.
+
+```{r}
+count_table_Health_Exp <- as.data.frame(table(data$Health_Exp_Per_Capita))
+colnames(count_table_Health_Exp) <- c("Health_Exp_Per_Capita", "Count")
+
+# find the max frequency
+max_count <- max(count_table_Health_Exp$Count)
+max_count
+
+# Get the values with the highest frequency and returns a numeric value
+mode_val <- as.numeric(as.character(count_table_Health_Exp$Health_Exp_Per_Capita[count_table_Health_Exp$Count == max_count]))
+print(mode_val)
+```
+
+We then impute the missing values with the mode in a replicated data table.
+
+```{r}
+# Impute missing values with the mode
+data_imp_mode <- data
+data_imp_mode$Health_Exp_Per_Capita[is.na(data_imp_mode$Health_Exp_Per_Capita)] <- mode_val
+data_imp_mode$Health_Exp_Per_Capita
+```
+
+### Impute with Mean
+```{r}
+data_imp_mean <- data
+data_imp_mean$Health_Exp_Per_Capita[is.na(data_imp_mean$Health_Exp_Per_Capita)] <- mean(data_imp_mean$Health_Exp_Per_Capita, na.rm = TRUE) # na.rm is set to TRUE here to remove the missing values when calculating the mean.
+data_imp_mean$Health_Exp_Per_Capita
+```
+
+### Impute with Median
+```{r}
+data_imp_median <- data
+data_imp_median$Health_Exp_Per_Capita[is.na(data_imp_median$Health_Exp_Per_Capita)] <- median(data_imp_median$Health_Exp_Per_Capita, na.rm=TRUE) #na.rm is set to TRUE here to remove the missing values when calculating the median.
+data_imp_median$Health_Exp_Per_Capita
+```
+Let's proceed with using median to impute the data. 
+
+```{r}
+summary(data)
+```
+
+
+
+```{r}
+summary(data_imp_median)
+```
+
+Now impute for Health_Expend_of_GDP too using median.
+
+```{r}
+# Save your final dataframe to data_final variable
+data_final <- data_imp_median
+
+data_final$Health_Expend_of_GDP[is.na(data_final$Health_Expend_of_GDP)] <- median(data_final$Health_Expend_of_GDP, na.rm=TRUE)
+
+# Check using summary statistics if all the NA has been removed
+summary(data_final)
+```
+
+# 6. Data Manupulation - Simple Data Slicing
+
+6.1 Column Indexing/Slicing
+6.2 Row Indexing/Slicing
+
+## 6.1 Column indexing and slicing
+We retrieve a data frame column slice with the single square bracket "[]" operator or "$" operator. We can use either numeric or name indexing. We can combine more than two columns by packing the column names in a vector. 
+
+```{r}
+# Example of numeric indexing
+data_final[1]
+
+# Example of name indexing
+data_final["Country"]
+
+# Example of name indexing with "$" operator
+data_final$Country
+
+# Example of packing two or more columns in a vector
+data_final[c("Country", "Region", "Health_Exp_Per_Capita")]
+
+# Example of slicing a continuous range
+data_final[1:5]
+```
+
+## Row indexing and slicing
+We retrieve rows from a data frame with the single square bracket operator, just like what we did with columns. However, in additional to an index vector of row positions, we **append an extra comma character**. 
+The extra comma is crucial for row indexing, indicating that all columns should be included.
+```{r}
+# Example of numeric indexing, retrieving row 10
+data_final[10,]
+
+# Example of numeric indexing, retrieving row 1 and 3
+data_final[c(1,3),] 
+
+# Example of numeric slicing, retrieving row 1 to 10
+data_final[1:10,] 
+
+# Applying functions while indexing allows for operations on the selected subset of data, such as ordering by the Total_Pop column.
+df <- data_final[order(data_final$Total_Pop),]
+df
+
+```
+
+# 7. More Data Exploration and Analysis
+Let's explore the dataset further by answering the following questions. 
+
+**Explore**
+
+1. What is the difference between the maximum and minimum "mean Health Expenditure per Capita by Region"?
+2. Does the countries which spends more in Health Expenditure have higher life expectancy?
+3. Find the countries within SouthEast Asia that are within the bottom 10 percentile in term of Health Expenditure per Capita in the world.
+4. Which variables have high correlations with the other variables?
+
+```{r}
+#Question (1)
+
+# First find the mean health expenditure by Region
+meanExpByRegion = tapply(data_final$Health_Exp_Per_Capita, data_final$Region, mean)
+print(meanExpByRegion)
+
+# Substract the min from max
+max(meanExpByRegion) - min(meanExpByRegion)
+```
+
+
+```{r}
+#Question (2)
+plot(data_final$Health_Exp_Per_Capita, data_final$Life_Expectancy_Both)
+```
+
+```{r}
+#Question (3)
+
+# First find the 10th percentile value based on Health Expenditure per Capita
+quantile(data_final$Health_Exp_Per_Capita, probs = seq(.1, .9, by = .1))
+
+temp <- data[data$Health_Exp_Per_Capita<=38 & !is.na(data$Health_Exp_Per_Capita),] #try changing this to 39, there will be 21 rows
+
+# Next filter the dataset by Region == "Southeast Asia" and the quantile required, select only the Country and Health_Exp_Per_Capita
+SEAbelow10 <- subset(data_final, Region == "SouthEast Asia" & Health_Exp_Per_Capita <= 38, select = c("Country", "Health_Exp_Per_Capita"))
+SEAbelow10
+
+```
+
+For Question 4, you will learn the correlation function. First, you need to ensure that your dataframe that is passed to the function contains only numerical variables.
+
+```{r}
+#Question (4)
+
+# Slice the dataframe to get only the numerical variables
+colnames(data_final)
+str(data_final)
+cor_data <- data_final[3:11]
+
+# Use cor(x, method = "pearson",...) function to find the correlation values, save the output to variable "result". Columns with "NA" cannot find the correlation
+result_NA <- cor(cor_data, method = "pearson")
+round(result_NA, 2)
+
+# Use cor() function to find the correlation values, drop all rows with any NA
+result_ignore_NA <- cor(cor_data, method = "pearson", use = "complete.obs")
+
+# round the values to 2 decimal places
+round(result_ignore_NA, 2)
+```
+
+```{r}
+# Use cor() function to find the correlation values, correlations are computed only using rows that are not NA (pairwise). 
+result_ignore_NA_pairwise <- cor(cor_data, method = "pearson", use = "pairwise.complete.obs")
+
+# round the values to 2 decimal places
+round(result_ignore_NA_pairwise, 2)
+```
+
+
+Since it is hard to read the numbers, you can consider using a corrplot to visualize the correlations. Install the package corrplot in the R console and the load the library. 
+
+```{r}
+
+library(corrplot)
+corrplot(result_ignore_NA, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+
+```
+
+

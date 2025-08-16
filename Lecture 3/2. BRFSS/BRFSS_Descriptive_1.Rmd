@@ -1,0 +1,369 @@
+---
+title: "BRFSS 2021 – Asthma Analysis (Instructional Notebook)"
+author: "ECON145 Instructors"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+    theme: readable
+    df_print: paged
+  pdf_document:
+    toc: true
+---
+
+# Overview
+
+This instructional notebook walks you through an end-to-end analysis of asthma using the **2021 Behavioral Risk Factor Surveillance System (BRFSS)** dataset.
+
+**Learning outcomes**
+
+- Load, inspect, and clean survey data in R.
+- Convert coded variables into human-readable labels using *factors*.
+- Produce a **Table 1**-style summary for categorical variables.
+- Visualize distributions (histogram, ECDF, and boxplot).
+- Explore BMI distributions by smoking status.
+- Join state **FIPS** mappings and build a **US choropleth** of asthma prevalence by state.
+
+---
+
+# Setup
+
+```{r setup, message=FALSE, warning=FALSE}
+# Core packages
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(forcats)
+library(scales)
+library(plotly)
+library(rlang)
+
+# Set a reproducible theme
+theme_set(theme_minimal(base_size = 14))
+
+# User path to data (edit this to your local path)
+# Keep check.names = FALSE so names like `_STATE` remain untouched.
+file_path <- "D:/1_Teaching_Work_Folder/_SMU_Courses/ECON145_Intro to Healthcare Analytics/2025/Aug_2025/Hands-On/Lecture 3/2. BRFSS"
+```
+
+---
+
+# Load Data
+
+```{r load-data}
+# Replace with your actual filename
+# The dataset is assumed to be a CSV already filtered to relevant BRFSS 2021 fields.
+df_asthma <- read_csv(
+  file.path(file_path, "brfss2021_asthma.csv"),
+  show_col_types = FALSE
+)
+
+# If your CSV was read with base R and lost underscores, you can prevent name changes with:
+# df_asthma <- read.csv(file.path(file_path, "brfss2021_asthma.csv"),
+#                       check.names = FALSE, stringsAsFactors = FALSE)
+
+# Quick structure and preview
+glimpse(df_asthma)
+```
+
+**Teaching notes**
+
+- `glimpse()` (from `dplyr`) is like `info()` in pandas: it shows column names and types, plus a preview of values.
+- For survey data, many variables are categorical (best stored as **factors**).
+
+---
+
+# Clean & Label Variables
+
+We convert coded numerics to labeled factors. This improves plots, summaries, and modeling.
+
+```{r label-factors}
+# 2.1 Age (5-year groups) — ordered factor
+df_asthma <- df_asthma %>%
+  mutate(
+    `_AGEG5YR` = factor(`_AGEG5YR`,
+                        levels = 1:14,
+                        labels = c("18–24","25–29","30–34","35–39","40–44","45–49",
+                                   "50–54","55–59","60–64","65–69","70–74","75–79","80+","Unknown"),
+                        ordered = TRUE),
+    # 2.2 Sex
+    SEXVAR = factor(SEXVAR,
+                    levels = c(1,2,9),
+                    labels = c("Male","Female","Refused")),
+    # 2.3 Race/Ethnicity
+    `_IMPRACE` = factor(`_IMPRACE`,
+                        levels = c(1,2,3,4,5,6,7,9),
+                        labels = c("White NH","Black NH","Asian NH","Pacific NH",
+                                   "FirstNation NH","Multiracial NH","Hispanic","Unknown")),
+    # 2.4 Education — ordered
+    EDUCA = factor(EDUCA,
+                   levels = c(1,2,3,4,5,6,9),
+                   labels = c("No formal education","Grades 1–8","Grades 9–11",
+                              "High school graduate","Some college","College graduate","Refused"),
+                   ordered = TRUE),
+    # 2.5 Income — ordered
+    `_INCOMG1` = factor(`_INCOMG1`,
+                        levels = c(1,2,3,4,5,6,9),
+                        labels = c("<$15,000","$15–25k","$25–35k","$35–50k","$50–75k","$75k+","Unknown"),
+                        ordered = TRUE),
+    # 2.6 Employment
+    EMPLOY1 = factor(EMPLOY1,
+                     levels = 1:9,
+                     labels = c("Employed for wages","Self-employed","Out of work ≥1yr",
+                                "Out of work <1yr","Homemaker","Student","Retired",
+                                "Unable to work","Refused")),
+    # 2.7 Marital
+    MARITAL = factor(MARITAL,
+                     levels = c(1,2,3,4,5,6,9),
+                     labels = c("Married","Divorced","Widowed","Separated",
+                                "Never married","Unmarried couple","Refused")),
+    # 2.8 Smoker status
+    `_SMOKER3` = factor(`_SMOKER3`,
+                        levels = c(1,2,3,4,9),
+                        labels = c("Current smoker (every day)","Current smoker (some days)",
+                                   "Former smoker","Never smoked","Don't know / Refused / Missing")),
+    # 2.9 Asthma ever
+    ASTHMA3 = factor(ASTHMA3,
+                     levels = c(1,2,7,9),
+                     labels = c("Yes","No","Don't know / Not sure","Refused"))
+  )
+
+# 2.10 Convert BMI to numeric and scale by 100
+df_asthma <- df_asthma %>%
+  mutate(`_BMI5` = as.numeric(`_BMI5`) / 100)
+
+```
+
+**Teaching notes**
+
+- Use **factors** for categories. Use `ordered = TRUE` for ordinal categories (e.g., education and income).
+- `_BMI5` in BRFSS is stored as BMI×100; divide by 100 to recover BMI.
+
+---
+
+# Categorical Summary (Table 1 style)
+
+We’ll build a helper to count categories and proportions (including missing).
+
+```{r summarize-categorical}
+summarize_categorical <- function(df, vars_to_summarize) {
+  out <- lapply(vars_to_summarize, function(var) {
+    x <- df[[var]]
+    freq <- table(x, useNA = "always")
+    prop <- prop.table(freq) * 100
+    
+    cats <- names(freq)
+    # NA in names(freq) appears as NA (not "<NA>")
+    cats[is.na(cats)] <- "Missing"
+    
+    data.frame(
+      Variable = var,
+      Category = cats,
+      Count = as.integer(freq),
+      `Proportion (%)` = round(as.numeric(prop), 1),
+      check.names = FALSE,
+      stringsAsFactors = FALSE
+    )
+  })
+  do.call(rbind, out)
+}
+
+cat_vars <- c("_AGEG5YR","SEXVAR","_IMPRACE","EDUCA","_INCOMG1",
+              "EMPLOY1","MARITAL","_STATE","_SMOKER3","ASTHMA3","ASTHNOW")
+
+demo_summary <- summarize_categorical(df_asthma, cat_vars)
+
+head(demo_summary, 15)
+```
+
+**Teaching notes**
+
+- `table(..., useNA = "always")` keeps missing values.
+- If variables are **factors**, output respects the factor level order, which is helpful in reporting.
+
+---
+
+# Visualizing Age Distributions by Asthma Status
+
+We compare age distributions for respondents with and without asthma using a histogram, ECDF, and boxplot.
+
+## Histogram (overlaid)
+
+```{r age-histogram}
+df_asthma_age <- df_asthma %>%
+  select(`_AGE80`, ASTHMA3) %>%
+  filter(ASTHMA3 %in% c("Yes","No")) %>%
+  droplevels()
+
+ggplot(df_asthma_age, aes(x = `_AGE80`, fill = ASTHMA3)) +
+  geom_histogram(bins = 30, position = "identity", alpha = 0.6) +
+  labs(
+    title = "Age Distribution by Asthma Status",
+    x = "Age (grouped at 80+)",
+    y = "Count",
+    fill = "Asthma Status"
+  )
+```
+
+## ECDF (empirical CDF)
+
+```{r age-ecdf}
+ggplot(df_asthma_age, aes(x = `_AGE80`, color = ASTHMA3)) +
+  stat_ecdf(linewidth = 1) +
+  labs(
+    title = "ECDF: Age Distribution by Asthma Status",
+    x = "Age (grouped at 80+)",
+    y = "Cumulative Proportion",
+    color = "Asthma Status"
+  )
+```
+
+## Boxplot
+
+```{r age-boxplot}
+ggplot(df_asthma_age, aes(x = ASTHMA3, y = `_AGE80`, fill = ASTHMA3)) +
+  geom_boxplot() +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    title = "Age Distribution by Asthma Status (Boxplot)",
+    x = "Asthma Status",
+    y = "Age (grouped at 80+)"
+  ) +
+  theme(legend.position = "none")
+```
+
+**Teaching notes**
+
+- **Histogram** shows the shape of distributions; overlap/transparency helps compare groups.
+- **ECDF** compares distributions across the entire range.
+- **Boxplot** summarizes median and IQR, highlighting shifts and outliers.
+
+---
+
+# BMI by Smoking Status
+
+We explore BMI differences across smoking categories. We also cap extreme BMI values to focus on realistic ranges (< 50).
+
+```{r bmi-by-smoking}
+valid_smoker <- c("Current smoker (every day)",
+                  "Current smoker (some days)",
+                  "Former smoker",
+                  "Never smoked")
+
+df_smoker <- df_asthma %>%
+  filter(`_SMOKER3` %in% valid_smoker) %>%
+  mutate(`_BMI5` = as.numeric(`_BMI5`)) %>%
+  filter(is.na(`_BMI5`) | `_BMI5` < 50) %>%   # keep NA or BMI < 50
+  droplevels()
+
+ggplot(df_smoker, aes(x = `_SMOKER3`, y = `_BMI5`, fill = `_SMOKER3`)) +
+  geom_boxplot() +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    title = "BMI Distribution by Smoker Category",
+    x = "Smoker Category",
+    y = "BMI"
+  ) +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 15, hjust = 1))
+```
+
+**Teaching notes**
+
+- BRFSS BMI above 50 is extremely rare; trimming helps focus interpretation.
+- Factor labels make axis tick labels self-explanatory.
+
+---
+
+# State Mapping (FIPS) & Choropleth
+
+We join state **FIPS** codes to derive state abbreviations and names; then, we compute asthma prevalence by state and visualize a **US choropleth**.
+
+```{r fips-join, message=FALSE, warning=FALSE}
+# 6.1 Load state FIPS mapping (| delimited), expected columns: STATE, STUSAB, STATE_NAME
+fips_mapping <- read_delim(file.path(file_path, "state_fips.csv"),
+                           delim = "|", show_col_types = FALSE) %>%
+  mutate(STATE = as.integer(STATE))
+
+# 6.2 Ensure `_STATE` is integer for joining
+df_asthma <- df_asthma %>% mutate(`_STATE` = as.integer(`_STATE`))
+
+# 6.3 Join on STATE FIPS
+df_asthma <- df_asthma %>%
+  left_join(fips_mapping, by = c("_STATE" = "STATE"))
+
+# 6.4 Keep only variables of interest for state analysis (optional simplification)
+df_state <- df_asthma %>% select(ASTHMA3, `_STATE`, STUSAB, STATE_NAME)
+
+# 6.5 Create a cleaned Yes/No variable for aggregation
+df_state <- df_state %>%
+  mutate(ASTHMA3_clean = case_when(
+    ASTHMA3 %in% c("Yes") ~ "Yes",
+    ASTHMA3 %in% c("No")  ~ "No",
+    TRUE ~ NA_character_
+  ))
+
+# 6.6 Aggregate by state
+state_summary <- df_state %>%
+  group_by(STUSAB) %>%
+  summarise(
+    Total = n(),
+    Yes = sum(ASTHMA3_clean == "Yes", na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(Proportion = Yes / Total) %>%
+  left_join(df_state %>% distinct(STUSAB, STATE_NAME), by = "STUSAB")
+
+# 6.7 Plotly choropleth (USA)
+fig <- plot_ly(
+  data = state_summary,
+  type = "choropleth",
+  locations = ~STUSAB,
+  locationmode = "USA-states",
+  z = ~Proportion,
+  colorscale = "Blues",
+  colorbar = list(title = "Asthma Prevalence")
+) %>%
+  layout(
+    title = "Proportion of Asthma (Yes) Cases by State",
+    geo = list(scope = "usa", bgcolor = "rgba(0,0,0,0)")
+  ) %>%
+  style(
+    hoverinfo = "text",
+    text = ~paste0(
+      STATE_NAME, "<br>",
+      "Yes: ", Yes, "<br>",
+      "Total: ", Total, "<br>",
+      "Proportion: ", percent(Proportion, accuracy = 0.01)
+    )
+  )
+
+fig
+```
+
+**Teaching notes**
+
+- `left_join()` attaches state abbreviations and names to each record.
+- Aggregation at state level supports geographic storytelling.
+- Choropleth maps are effective for **regional patterns**, but always accompany them with **numerical summaries**.
+
+---
+
+# Practice Exercises
+
+1. Create a **Table 1** of demographic variables for asthma vs. non-asthma (Yes/No) side-by-side.
+2. Replace the histogram with **density plots** (`geom_density()`) and discuss the pros/cons.
+3. Add **mean BMI points** on top of the smoker boxplots (`stat_summary(fun = "mean")`).
+4. Re-compute state prevalence **excluding** respondents with missing asthma status; compare to the original.
+5. Export your summary table using `write_csv()`.
+
+---
+
+# Key Takeaways
+
+- In health surveys, **factor labeling** is essential for clarity.
+- Use **ordered factors** for ordinal categories (education, income, age bands).
+- Always perform **EDA** with both **tables and plots** for a rounded view.
+- For maps, verify **join keys** (like FIPS) and **coverage** before interpreting patterns.

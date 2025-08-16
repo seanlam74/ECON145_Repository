@@ -1,0 +1,176 @@
+---
+title: "Introduction to R Markdown and R Notebook"
+author: "ECON145 Instructors"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    theme: readable
+    self_contained: TRUE
+    toc: TRUE
+    number_sections: TRUE
+    df_print: paged
+---
+
+<style type="text/css">
+
+body{ /* Normal  */
+      font-size: 12pt;
+  }
+td {  /* Table  */
+  font-size: 8pt;
+}
+h1.title {
+  font-size: 26pt;
+  color: DarkRed;
+}
+h1 { /* Header 1 */
+  font-size: 20pt;
+  color: DarkBlue;
+}
+h2 { /* Header 2 */
+  font-size: 18pt;
+  color: DarkBlue;
+}
+h3 { /* Header 3 */
+  font-size: 16pt;
+  color: DarkBlue;
+}
+code.r{ /* Code block */
+    font-size: 12pt;
+}
+pre { /* Code block - determines code spacing between lines */
+    font-size: 10pt;
+}
+</style>
+
+
+
+# What is R Markdown?
+
+
+
+R Markdown is a convenient tool for reproducible and dynamic reports!  
+
+<video width="800" height="600" controls>
+  <source src="What_is_R_Markdown.mp4" type="video/mp4">
+</video>
+
+
+
+# Why R Markdown?
+
+
+
+- While it was created for R, it now accepts many programming languages.  
+- Execute code in a few ways:  
+    1. **Inline Code:**  Brief code that takes place during the written part of the document. 
+    2. **Code Chunks:**  Parts of the document that includes several lines of program or analysis code. It may render a plot or table, calculate summary statistics, load packages, etc.  
+- It is easy to:  
+    - Embed images.  
+    - Learn Markdown syntax.  
+    - Include LaTeX equations.  
+    - Include interactive tables.
+    - Use version control.
+    - Add external links - R Markdown even understands some html code!  
+    - Make beautifully formatted documents.
+- Do not need to worry about page breaks or figure placement.  
+- Consolidate your code and write up into a single file:  
+    + Slideshows, PDFs, html documents, Word files  
+
+
+
+# Structure of an R Markdown File
+
+
+## Header
+
+
+Headers in R Markdown files contain some metadata about your document, which you can customize. Below is a simple example that purely states the title, author name(s), date, and output format.
+
+-\-\-  
+title: "YOUR_TITLE"  
+author: "YOUR_NAME"  
+date: "1 Jan, 2019"  
+output: html\_document  
+-\-\-
+
+
+## Body Text
+
+
+The body of the document is where you actually write your reports. The beauty of R Markdown is that you can evaluate R code right in the text. To do this, you start inline code with "\`r", type the code you want to run, and close it again with a "\`". Usually, this key is below the escape (ESC) key or next to the left SHIFT button.
+
+For example, if you want to have the result of 48 times 35 in your text, you type "\`r\ 48\*35\`", which returns `r 48*35`.
+
+
+## Code Chunks
+
+
+In the section above we introduced you to running code inside text, but often you need to take several steps in order to get to the result you need. This is why there are code chunks.
+
+First, insert a code chunk by going to *Code -> Insert Chunk* or by pressing *CTRL+ALT+I*. Below is a simple example that conducts some basic calculations and assigns the values to some variables.
+```{r}
+x = 3*3
+y = x^2
+```
+
+After executing the above code chunk, we get a variable named *y* with value = `r y`.
+
+Code chunks can contain whatever you need, including tables, and figures. Anything you can do in R Console can be done here.
+
+
+
+# R Markdown Basics
+
+
+
+Check out <a href="http://www.rstudio.com/wp-content/uploads/2015/03/rmarkdown-reference.pdf">R Markdown Reference Guide</a> and  <a href="https://bookdown.org/yihui/rmarkdown-cookbook/">R Markdown Cookbook</a>.
+
+Here are some useful tips from <a href="https://www.rstudio.com/wp-content/uploads/2015/02/rmarkdown-cheatsheet.pdf">R Markdown Cheatsheet</a>:  
+
+
+![**Figure: Markdown Basics**](Markdown_Basics_New.png)
+
+
+
+
+**Helpful hints:**  
+
+- End a line with two spaces to start a new paragraph.  
+- Words formatted like code should be surrounded by back ticks on both sides: `  
+- To make something superscript surround it with `^` on each side.  Super^script^ was created by typing `Super^script^`.  
+- Equations can be inline code using `$` and centered as a blocked equation within the document with `$$`.  For example, $E = mc^2$ is inline while the following is a blocked equation is: $$E = mc^2$$  
+    - **Note:** To make it superscript with `$` and `$$` a `^` is needed before each alphanumeric that is superscript.  
+    - Other fun math stuff:  
+        - Square root:  `$\sqrt{b}$` will create $\sqrt{b}$  
+        - Fractions:  `$\frac{1}{2}$` = $\frac{1}{2}$  
+        - Fractional Equations:  `$f(x)=\frac{P(x)}{Q(x)}$` = $f(x)=\frac{P(x)}{Q(x)}$  
+        - Binomial Coefficients:  `$\binom{k}{n}$` = $\binom{k}{n}$  
+        - Integrals:  `$$\int_{a}^{b} x^2 dx$$` = $$\int_{a}^{b} x^2 dx$$
+    - [ShareLaTeX](https://www.sharelatex.com/learn/Main_Page) is an awesome source for LaTeX code.
+    - [LyX](https://www.lyx.org/) is a document processor like MS Word but for LaTeX.
+
+
+**Some more mathy stuff:**
+		
+| Description |         Code        |      Examples          |
+|------------:|---------------------|:----------------------:|
+|   Greek letters  |  `$\alpha$` `$\beta$` `$\gamma$` `$\rho$` `$\sigma$` `$\delta$` `$\epsilon$` `$mu$`  |    $\alpha$ $\beta$ $\gamma$ $\rho$ $\sigma$ $\delta$ $\epsilon$ $\mu$   |
+|  Binary operators  |  `$\times$` `$\otimes$` `$\oplus$` `$\cup$` `$\cap$`|   $\times$ $\otimes$ $\oplus$ $\cup$ $\cap$	$\times$|
+|    Relation operators  |    `$< >$` `$\subset$` `$\supset$` `$\subseteq$` `$\supseteq$` |     $< >$ $\subset$ $\supset$ $\subseteq$ $\supseteq$ |
+|    Others  |    `$\int$` `$\oint$` `$\sum$` `$\prod$` |     $\int$ $\oint$ $\sum$ $\prod$ |
+
+
+******************************************************************************************
+
+
+
+# What is R Notebook?
+
+
+
+An R Notebook is an R Markdown document with chunks that can be executed independently and interactively, with output visible immediately beneath the input.
+
+R Notebooks are a method of [literate programming](https://en.wikipedia.org/wiki/Literate_programming) that allows for direct interaction with R while producing a reproducible document with publication-quality output.
+
+

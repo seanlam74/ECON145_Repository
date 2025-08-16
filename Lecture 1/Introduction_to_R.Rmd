@@ -1,0 +1,354 @@
+---
+title: "Introduction to R"
+author: "ECON145 Instructors"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    theme: readable
+    self_contained: TRUE
+    toc: TRUE
+    number_sections: TRUE
+    df_print: paged
+---
+
+
+# Installation
+
+
+You can download R from https://www.r-project.org/. Please install following the default settings. If you are using a 64-bit operating system, installing only the 64-bit version of R will be sufficient. 
+
+
+Except for this first introduction to R, we will use RStudio throughout the class. RStudio is a free and open-source integrated development environment (IDE) for R. You can download RStudio from https://www.rstudio.com/. Similarly, you can install following the default settings. Note that you have to download and install R first for RStudio to work. 
+
+
+In general, the best way to learn R is through trial and error, and if you encounter any problems, you will most likely to find a solution on the Internet by Googling it.
+
+
+You can follow the rest of this document by typing the commands (in light grey boxes) in R Console either in R or RStudio, and the output of all the commands are displayed in boxes immediately below each command box. You can ignore the "##" sign in the outputs.
+
+
+
+# Functions and Variables
+
+
+
+R can be used as a basic calculator.
+```{r}
+5*9
+```
+
+
+```{r}
+2^10
+```
+
+
+R works in terms of functions and variables. A function can take in several inputs (also known as arguments) and returns an output value. An example is the square root function.
+```{r}
+sqrt(2)
+```
+
+
+The function here is 'sqrt' for square root; the input, or argument, is the number 2; and the output is 1.414214, or the square root of 2. There are thousands of functions in R. Some of them are built into R, like this one, and some can be added in by installing packages, which we will also try in this class.
+
+
+You can save the output of a function to a variable.
+```{r}
+SquareRoot2 = sqrt(2)
+```
+
+
+You can see the value of a variable by typing its name.
+```{r}
+SquareRoot2
+```
+
+
+You can also use a leftward pointing arrow to assign a variable to some value. There are some subtle differences between the leftward pointing arrow and the equal sign, which you can search online and find out if you are interested in that. For most cases, the equal sign is good enough.
+```{r}
+SquareRoot3 <- sqrt(3)
+SquareRoot3
+```
+
+
+Generally, we have a lot of freedom in naming the variables. However, there are certain rules that people typically follow for consistency. For example, we do not use spaces or underscores in variable names and do not start variable names with a number. Note that variable names are case sensitive.
+
+
+
+
+# Vectors and Data Frames
+
+
+
+We can also create more advanced data structures in R, like vectors and data frames.
+
+
+A vector is a list of numbers stored as the same object. You can create vectors of numbers using the 'c' function, which stands for "combine". 
+```{r}
+vec = c(1,2,3,4,5)
+vec
+```
+
+
+Suppose we want to enter some data into R about the life expectancy in different countries. Let's first create a vector of country names. We will call it *Country*, and then use the 'c' function to combine the names of five different countries. We need to put each country name in quotes since we are typing characters, not numbers.
+```{r}
+Country = c("Brazil", "China", "India", "Switzerland", "USA")
+Country
+```
+
+
+Next, let's create a second vector, this time with the life expectancies corresponding to the above five countries. 
+```{r}
+LifeExpectancy = c(74, 76, 65, 83, 79)
+LifeExpectancy
+```
+
+
+We have to make sure that life expectancies are entered in the same order as the country names so that they correspond to each other in the order of the vectors. We had to create these as two separate vectors since we cannot combine characters and numbers in the same vector.
+
+
+To display an element of a vector, we can use square brackets.
+```{r}
+Country[2]
+LifeExpectancy[3]
+```
+
+
+We can also display a range of elements in a vector.
+```{r}
+Country[2:4]
+```
+
+
+We cannot combine characters and numbers in the same vector. Therefore, to put our country names and our life expectancy values in the same object, we need to combine these vectors into a data frame.
+```{r}
+Data = data.frame(Country, LifeExpectancy)
+Data
+```
+
+
+To access a variable in a data frame, you always have to link it to the data frame it belongs to with the dollar sign.
+```{r}
+Data$LifeExpectancy
+```
+
+
+We can then access the elements in the variable as before.
+```{r}
+Data$LifeExpectancy[1]
+Data$LifeExpectancy[3:5]
+```
+
+
+This is similar to a matrix, or a set of columns in Excel. Each column is a variable, and each row is an observation. A nice thing about a data frame is that it maintains the type of each variable.
+
+
+Now suppose we want to add another variable, the population in thousands of each country. Again, we will first create a vector called Population
+```{r}
+Population <- c(199000, 1390000, 1240000, 7997, 318000)
+Population
+```
+
+
+Next, to combine this new variable Population with our data frame, *Data*, we will use the 'cbind' function, which combines inputs as columns.
+```{r}
+Data2 = cbind(Data, Population)
+Data2
+```
+
+
+Now, suppose we want to add new observations for *Australia* and *Greece*. We can overwrite our previous *Country*, *LifeExpectancy* and *Population* variables. This is fine because we have them saved in *Data2*.
+
+
+```{r}
+Country = c("Australia", "Greece")
+LifeExpectancy = c(82, 81)
+Population = c(23050, 11125)
+NewData = data.frame(Country, LifeExpectancy, Population)
+NewData
+```
+
+
+We can combine our new data with the old data using the 'rbind' function, which combines inputs as rows.
+```{r}
+Data3 = rbind(Data2, NewData)
+Data3
+```
+
+
+These functions allow us to create data structures and modify data structures in R, but most of the time, you will be reading in data from an external file.
+
+
+
+# Loading Data Files
+
+
+
+In this course, we will often work with data stored in csv files, or comma separated value files.
+
+
+The first thing you need to do to read in a data file is to navigate to the directory on your computer where the data file is saved. If you are using R, on a Mac, go to the "Misc" menu, then select "Change Working Directory..." On a PC, go to the "File" menu and select "Change dir...". Navigate to the folder where you saved the data file that you have downloaded and then select that folder. In RStudio, go to the "Session" menu and select "Set Working Directory" and then "Choose Directory..." Similarly, navigate to the folder where you saved the data file that you have downloaded and then select that folder. To check the path you are working on, try
+```{r}
+getwd()
+```
+
+
+This path must lead to the folder that contains the data file, "WHO.csv", which contains recent statistics from the World Health Organization (WHO) on all countries. Then we can read in the data file.
+```{r}
+WHO = read.csv("WHO.csv")
+WHO
+```
+You can also read the full path to ensure you have directed to the correct path:
+```{r}
+file_path <- "D:/1_Teaching_Work_Folder/_SMU_Courses/ECON145_Intro to Healthcare Analytics/2025/Aug_2025/Hands-On/Lecture 1"
+WHO <- read.csv(file.path(file_path, "WHO.csv"))
+WHO
+
+# Version that skips the first 2 columns
+WHO1 <- read.csv(file.path(file_path, "WHO.csv"))[-c(1:2)]
+WHO1
+
+# Version that removes the first row of data
+WHO2 <- WHO[-1,]
+rownames(WHO2) <- NULL
+WHO2
+```
+
+There are two very useful commands to look at our data. The first is the 'str' function, which shows us the structure of the data.
+```{r}
+str(WHO)
+```
+
+
+You can see that we have a data frame of 194 observations and 13 variables. This data set contains recent statistics from the World Health Organization (WHO) on all countries. The variables are the name of the country, the region the country is in, the population in thousands, the percentage of the population under 15 and over 60, the fertility rate or average number of children per woman, the life expectancy in years, the child mortality rate which is the number of children who die by age five per 1,000 births, the number of cellular subscribers per 100 population, the literacy rate among adults aged greater than or equal to 15, the gross national income per capita, the percentage of male children enrolled in primary school, and the percentage of female children enrolled in primary school. 
+
+
+For each variable, 'str' function gives us the name of the variable, and then a description of the type of the variable followed by a first few values of the variable. There are different types in this data set. One is the character variable (chr). *Country* and *Region* are both character variables. since they are strings of letters in in the data file. We also have two types of numerical values, integer (int) and general numerical values (num).
+
+
+In our case, *Country* and *Region* are supposed to be categorical variables. For example, the *Region* variable has six different categories, including *Africa* and *Americas*. Each observation in the *Region* variable belongs to one of six different categories. Although not necessary in many cases, it is recommended to convert the character variables into categorical variables before analysis. This can be achieved with an additional argument when we read in the data file.
+```{r}
+WHO <- read.csv("WHO.csv", stringsAsFactors = TRUE)
+str(WHO)
+```
+
+
+In R, categorical variables are called factor variables (Factor), and categories are called levels. Now, both *Country* and *Region* are recognized as categorical variables now. The *Region* variable has six different categories or levels. The *Country* variable has 194 levels, which is the same number of observations we have; each value in this variable is different. In this case, it makes sense, since each country name is different.
+
+
+The other very useful function to take a look at our data is the 'summary' function.
+```{r}
+summary(WHO)
+```
+
+
+This gives a numerical summary of each of our variables. For the factor variables, *Country* and *Region*, it counts the number of observations in each of the levels or categories. We can see that we have 46 countries in the region *Africa*, 35 in the region *Americas*, etc. For each of the numerical values, the function gives the minimum, first quartile, median, mean, third quartile, and the maximum values in that variable. We can also see in some of the variables that we have this category called *NA's*. This means that some observations are missing values in that variable.
+
+
+Suppose we want to create a new data frame with only the countries in South-East Asia, we can use the 'subset' function. The double equal sign below means exactly equal to.
+```{r}
+SEA = subset(WHO, Region == "South-East Asia")
+str(SEA)
+```
+
+
+Next, suppose we want to save this new data frame, *SEA*, to a csv file.
+```{r}
+write.csv(SEA, "WHO_SEA.csv")
+```
+
+
+Now, you can check your file directory and see the new csv file we just created.
+
+
+
+# Data Analysis
+
+
+
+Let's do some basic data analysis using our WHO data. We can compute some statistics about a variable, such as mean and standard deviation.
+```{r}
+mean(WHO$Under15)
+```
+
+
+```{r}
+sd(WHO$Under15)
+```
+
+
+We can also get the statistical summary of just one variable using the 'summary' function.
+```{r}
+summary(WHO$Under15)
+```
+
+
+
+Let's create some plots for exploratory data analysis (EDA). First, l's create a basic scatter plot of *GNI* versus *FertilityRate*.
+```{r}
+plot(WHO$GNI, WHO$FertilityRate)
+```
+
+
+Next, let's create a histogram of life expectancy.
+```{r}
+hist(WHO$LifeExpectancy)
+```
+
+
+We can also create a box plot of *LifeExpectancy* sorted by *Region*.
+```{r}
+boxplot(WHO$LifeExpectancy ~ WHO$Region)
+```
+
+
+You may need to 'Show in New Window' (a small button on the top right corner of the figure region) and stretch it out to see all of the x-axis labels. To give nice labels to any of your plots, you can easily do this by adding a few arguments.
+```{r}
+boxplot(WHO$LifeExpectancy ~ WHO$Region, xlab = "Region", ylab = "Life Expectancy", main = "Life Expectancy of Countries by Region")
+```
+
+
+Lastly, let's compute some summary tables.
+```{r}
+table(WHO$Region)
+```
+
+
+For numerical variables, we can use the 'tapply' function.
+```{r}
+tapply(WHO$Over60, WHO$Region, mean)
+```
+This sorts the data, or each of the countries, by *Region* and then computes the mean of the variable *Over60*. The 'tapply' function applies whatever function name you put as the third argument, in our case, 'mean', on the value of the first argument, *Over60*, and then sorts the data by *Region*, the second argument. Let's try another one.
+
+
+```{r}
+tapply(WHO$LiteracyRate, WHO$Region, min)
+```
+
+
+The outputs are meaningless due to missing variables. A common thing to do is to remove the missing values when doing the computation. We will discuss in more detail on how to handle missing variables in the future class.
+```{r}
+tapply(WHO$LiteracyRate, WHO$Region, min, na.rm = TRUE)
+```
+You can also apply the summary across multiple factors using the list() function.
+
+```{r}
+tapply(WHO$LifeExpectancy, list(WHO$Country,WHO$Region), mean, na.rm = TRUE)
+```
+
+`dplyr` piping helps to concatenate various operations together in easy to understand codes
+
+```{r}
+library(dplyr)
+
+summary_data <- WHO %>%
+  group_by(Region) %>%
+  summarize(AverageLifeExpectancy = mean(LifeExpectancy, na.rm = TRUE),
+            MinimumLiteracyRate = min(LiteracyRate, na.rm = TRUE))
+summary_data
+```
+
+
+<span style="color:purple; font-family: Comic Sans MS; font-size: 2em"> **Congratulation! Now you have mastered most of the techniques we will use for the class.** </span>
+
+

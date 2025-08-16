@@ -1,0 +1,268 @@
+---
+title: "Data Wrangling"
+author: "ECON145 Instructor"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    theme: readable
+    self_contained: TRUE
+    toc: TRUE
+    number_sections: TRUE
+    df_print: paged
+---
+
+"dplyr" and "tidyr" packages are powerful R packages for data manipulation.
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+```
+
+Core tidyverse Packages:
+ggplot2: For data visualization, creating graphics and plots based on the grammar of graphics.
+dplyr: For data manipulation, including filtering, selecting, mutating, summarizing, and arranging data.
+tidyr: For tidying data, making datasets easy to manipulate (e.g., reshaping data, handling missing values).
+
+```{r}
+getwd()
+```
+
+
+```{r}
+data <- read.csv("2023_WorldBank.csv", stringsAsFactors = FALSE)
+head(data)
+str(data)
+colnames(data)
+summary(data)
+```
+
+"Country.Code", "Indicator.Name", "Indicator.Code" are not important. We drop them with dplyr select statement. 
+You can also use baseR alternative: `data <- data[, !names(data) %in% c("Country.Code", "Indicator.Name", "Indicator.Code")]`
+
+Data appears to be in wide format, each year is in a column. We can use tidyr to make this into a tidy data and recode column names as the year of observation. 
+
+tidyr is another R package from the tidyverse family, designed to help users clean and organize data into a tidy format. The primary goal of tidyr is to make data "tidy," meaning that each variable is a column, each observation is a row, and each value is a single cell. tidyr works closely with other packages like dplyr to simplify data manipulation workflows.
+
+Key functions of tidyr include:
+gather() / pivot_longer(): Converts wide data (where columns are variables) into long format (where each row represents a single observation of a variable).
+spread() / pivot_wider(): The reverse of pivot_longer(), it converts long data into wide format.
+separate(): Splits a single column into multiple columns based on a delimiter.
+unite(): Combines multiple columns into a single column.
+
+```{r}
+# remove unneccesary columns
+data <- dplyr::select(data, -c(Country.Code, Indicator.Name, Indicator.Code))
+
+# Pivot to tidy format where each Column is a Variable and each Row is an Observation (Life Expentancy)
+data_long <- pivot_longer(data, 
+                          cols = X1960:X2021, 
+                          names_to = "Year", 
+                          values_to = "Life.Exp")
+
+# The 'Year' column will have year names as characters starting with X. We remove the "X" and convert them to integers
+data_long$Year <- as.integer(sub("X", "", data_long$Year))
+
+str(data_long)
+colnames(data_long)
+```
+dplyr is an R package used for data manipulation and transformation. It is part of the tidyverse, a collection of R packages designed for data science. dplyr provides a set of functions that make it easier to work with data frames and manipulate them in a clear, concise, and efficient way.
+
+Key features of dplyr include:
+Pipes (%>%): Allows chaining multiple operations in a readable manner.
+
+Core Functions:
+select(): Choose columns.
+filter(): Filter rows based on conditions.
+mutate(): Create new columns or modify existing ones.
+summarize(): Aggregate data, often combined with group_by() to create group-wise summaries.
+group_by(): Group data by one or more variables, which is useful for applying functions like summarize().
+
+```{r}
+# applies the sum function for all NA values to all columns in data_long. check for NA values. Life Expectancy has 626 NA's
+data_long %>%
+  summarise_all(~ sum(is.na(.)))
+
+# Seems like all the missing values appear in Life.Exp. We check the unique values for Country.Name and Year first
+unique(data_long$Country.Name)
+unique(data_long$Year)
+
+# Since all the values look correct, we check the missing value across each Country for Life.Exp column
+temp_df <-data_long %>%
+  group_by(Country.Name) %>%
+  summarise(Missing_Life_Exp = sum(is.na(Life.Exp)))
+temp_df
+
+# To show only the rows with non-zero Missing Counts
+data_long %>%
+  group_by(Country.Name) %>%
+  summarise(Missing_Life_Exp = sum(is.na(Life.Exp))) %>%
+  filter(Missing_Life_Exp > 0)
+
+# Here we remove all rows with missing Life.Exp as they are not important for our analysis. na.omit is using baseR.
+data_long <- na.omit(data_long)
+length(unique(data_long$Country.Name))
+length(unique(data_long$Year))
+data_long
+
+```
+
+
+
+
+
+```{r}
+# Outlier Detection with boxplot
+ggplot(data_long, aes(x = Country.Name, y = Life.Exp)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) 
+
+```
+
+Outlier Detection: There are 260 countries in the remaining dataset. It is hard to visualize with a boxplot. Here we use Tukey Outlier Detection method to identify the countries. We use the Tukey fence method to help to identify the countries with outliers. 
+
+``` {r}
+
+Q1Q3Quantiles <- data_long %>%
+  group_by(Country.Name) %>%
+  summarize(Q1 = quantile(Life.Exp, 0.25, na.rm = TRUE),
+            Q3 = quantile(Life.Exp, 0.75, na.rm = TRUE),
+            IQR = IQR(Life.Exp, na.rm = TRUE)) %>%
+  mutate(Lower_Bound = Q1 - 1.5 * IQR,
+         Upper_Bound = Q3 + 1.5 * IQR) 
+
+Q1Q3Quantiles
+
+data_long_with_bounds <- left_join(data_long, Q1Q3Quantiles, by = "Country.Name")
+outliers_detected <- data_long_with_bounds %>%
+                        filter(Life.Exp < Lower_Bound | Life.Exp > Upper_Bound)
+
+```
+
+After checking the list of countries with outliers, they can be removed for our analysis. This decision depends on what is the objective of our analysis. Here we do not remove them.
+
+Next we check the summary statistics for the data across all countries. We again use `group_by` and `summarize` functions in `dplyr`. We can then use the summary statistics table to check with domain experts on the validity of the data.
+
+```{r}
+country_summary_stats <- data_long %>%
+  group_by(Country.Name) %>%
+  summarize(
+    Mean = mean(Life.Exp, na.rm = TRUE),
+    Median = median(Life.Exp, na.rm = TRUE),
+    SD = sd(Life.Exp, na.rm = TRUE),
+    Min = min(Life.Exp, na.rm = TRUE),
+    Max = max(Life.Exp, na.rm = TRUE),
+    Count = n(),
+    Missing = sum(is.na(Life.Exp))
+  )
+
+country_summary_stats
+length(unique(data_long$Country.Name))
+```
+
+There should be 62 years of data for each country. We remove countries with less than 62 years of data.
+The pull() function extracts a specific column from the filtered data.
+Here, it pulls the values of the Country.Name column from the filtered rows where Count is less than 62.
+
+```{r}
+# 1. Filter out country names with Count < 62
+countries_to_remove <- country_summary_stats %>%
+  filter(Count < 62) %>%
+  pull(Country.Name)
+
+countries_to_remove
+# 2. Filter out these countries from data_long
+data_long_filtered <- data_long %>%
+  filter(!Country.Name %in% countries_to_remove)
+length(unique(data_long_filtered$Country.Name))
+```
+
+We can also plot some charts using ggplot to visualize the data and use it to discuss with domain experts.
+We can plot with ggplot:
+1. Histogram of Life.Exp for all the data
+2. Boxplot of Life.Exp by Year
+3. Boxplot of Life.Exp by Country for selected Countries
+4. Time series plots for selected countries
+
+```{r}
+# Histogram
+ggplot(data_long_filtered, aes(x = Life.Exp)) +
+  geom_histogram(binwidth = 1, fill = "blue", color = "black") +
+  theme_minimal() +
+  labs(title = "Histogram of Life Expectancy", x = "Life Expectancy", y = "Count")
+```
+
+```{r}
+# Boxplot of Life.Exp by Year
+ggplot(data_long_filtered, aes(x = as.factor(Year), y = Life.Exp)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Life Expectancy by Year", x = "Year", y = "Life Expectancy")
+
+```
+
+```{r}
+# Boxplot of Life.Exp by Country for top 20 highest Mean Life Expectancy across the years
+# 1. Extract the Top 20 countries' Country.Name with `dplyr`
+top_20 <- data_long_filtered %>%
+  group_by(Country.Name) %>%
+  summarize(MeanLifeExp = mean(Life.Exp, na.rm = TRUE)) %>%
+  arrange(desc(MeanLifeExp)) %>%
+  top_n(20, MeanLifeExp) %>%
+  pull(Country.Name)
+top_20
+```
+
+```{r}
+# 2. Filter these countries with `dplyr`
+data_top_20 <- data_long_filtered%>%
+  filter(Country.Name %in% top_20)
+unique(data_top_20$Country.Name)
+# List excludes Singapore
+
+# Include Singapore in the list for comparison
+data_top_20_with_sg <- data_long_filtered %>%
+  filter(Country.Name %in% top_20 | Country.Name == 'Singapore')
+
+data_top_20_with_sg
+```
+
+```{r}
+# 3. Plot the Boxplot for Top 20 countries and Singapore
+ggplot(data_top_20_with_sg, aes(x = Country.Name, y = Life.Exp)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(title = "Top 20 Countries by Mean Life Expectancy", x = "Country", y = "Life Expectancy")
+```
+
+```{r}
+# Reorder by descending mean Life.Exp (`-Life,Exp` for descending)
+ggplot(data_top_20_with_sg, aes(x = reorder(Country.Name, -Life.Exp, FUN = mean), y = Life.Exp)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(title = "Top 20 Countries by Mean Life Expectancy", x = "Country", y = "Life Expectancy")
+```
+We can also plot time series for the Top 20 countries to visualize the trends.
+
+```{r}
+# Create the time series plot
+tseries <-ggplot(data_top_20, aes(x = Year, y = Life.Exp, color = Country.Name)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "Life Expectancy Over Time",
+       x = "Year",
+       y = "Life Expectancy",
+       color = "Country") 
+tseries
+
+```
+
+```{r}
+# Add Singapore in the comparison
+tseries + 
+  geom_line(data = filter(data_top_20_with_sg, Country.Name == "Singapore"), 
+            aes(x = Year, y = Life.Exp), 
+            color = "black", 
+            size = 1.5)
+```
+
+Congratulations! We have completed a quick introduction to dplyr, tidyr and ggplot. Remember, the best way **to learn** is to get your hands dirty, google for sample codes, read R documentation and learn when you are trying to solve problems.
