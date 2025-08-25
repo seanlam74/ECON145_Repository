@@ -43,9 +43,9 @@ Data appears to be in wide format, each year is in a column. We can use tidyr to
 
 tidyr is another R package from the tidyverse family, designed to help users clean and organize data into a tidy format. The primary goal of tidyr is to make data "tidy," meaning that each variable is a column, each observation is a row, and each value is a single cell. tidyr works closely with other packages like dplyr to simplify data manipulation workflows.
 
-Key functions of tidyr include:
-gather() / pivot_longer(): Converts wide data (where columns are variables) into long format (where each row represents a single observation of a variable).
-spread() / pivot_wider(): The reverse of pivot_longer(), it converts long data into wide format.
+*Key functions of tidyr include:*
+pivot_longer(): Converts wide data (where columns are variables) into long format (where each row represents a single observation of a variable).
+pivot_wider(): The reverse of pivot_longer(), it converts long data into wide format.
 separate(): Splits a single column into multiple columns based on a delimiter.
 unite(): Combines multiple columns into a single column.
 
@@ -106,40 +106,6 @@ data_long
 
 ```
 
-
-
-
-
-```{r}
-# Outlier Detection with boxplot
-ggplot(data_long, aes(x = Country.Name, y = Life.Exp)) +
-  geom_boxplot() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) 
-
-```
-
-Outlier Detection: There are 260 countries in the remaining dataset. It is hard to visualize with a boxplot. Here we use Tukey Outlier Detection method to identify the countries. We use the Tukey fence method to help to identify the countries with outliers. 
-
-``` {r}
-
-Q1Q3Quantiles <- data_long %>%
-  group_by(Country.Name) %>%
-  summarize(Q1 = quantile(Life.Exp, 0.25, na.rm = TRUE),
-            Q3 = quantile(Life.Exp, 0.75, na.rm = TRUE),
-            IQR = IQR(Life.Exp, na.rm = TRUE)) %>%
-  mutate(Lower_Bound = Q1 - 1.5 * IQR,
-         Upper_Bound = Q3 + 1.5 * IQR) 
-
-Q1Q3Quantiles
-
-data_long_with_bounds <- left_join(data_long, Q1Q3Quantiles, by = "Country.Name")
-outliers_detected <- data_long_with_bounds %>%
-                        filter(Life.Exp < Lower_Bound | Life.Exp > Upper_Bound)
-
-```
-
-After checking the list of countries with outliers, they can be removed for our analysis. This decision depends on what is the objective of our analysis. Here we do not remove them.
-
 Next we check the summary statistics for the data across all countries. We again use `group_by` and `summarize` functions in `dplyr`. We can then use the summary statistics table to check with domain experts on the validity of the data.
 
 ```{r}
@@ -170,6 +136,7 @@ countries_to_remove <- country_summary_stats %>%
   pull(Country.Name)
 
 countries_to_remove
+
 # 2. Filter out these countries from data_long
 data_long_filtered <- data_long %>%
   filter(!Country.Name %in% countries_to_remove)
