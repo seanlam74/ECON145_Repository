@@ -1,0 +1,86 @@
+---
+title: "Univariate Association"
+author: "ECON145 Instructor"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    theme: readable
+    self_contained: TRUE
+    toc: TRUE
+    number_sections: TRUE
+    df_print: paged
+---
+
+```{r}
+library(ggplot2)
+```
+
+
+Refer to the Framingham Heart Study micro-dataset
+
+```{r}
+framingham <- read.csv("Framingham.csv")
+str(framingham)
+```
+
+Here we categorize the patients into elderly (65 years old and above), pre-elderly (50 to less than 65 years old) and non-elderly (less than 50 years old)
+
+```{r}
+framingham$age_category <- cut(framingham$age,
+                          breaks = c(-Inf, 50, 65, Inf),
+                          labels = c("Less than 50", "50 to less than 65", "65 and above"))
+summary(framingham)
+```
+
+Suppose want to study if there is any statistically significant differences across elderly, pre-elderly and non-elderly groups for sysBP (Systolic BP). Elevated systolic blood pressure is a risk factor for heart disease and stroke.)
+
+```{r}
+ggplot(framingham, aes(x = age_category, y = sysBP)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Systolic BP across Age Categories",
+       x = "Age Category",
+       y = "Systolic BP") +
+  theme_minimal() +
+  theme(legend.title = element_blank())
+summary(framingham$sysBP)
+```
+
+The Median values seemed higher for pre-elderly and elderly age groups. We can perform one-way ANOVA to check if there are any statistically significant differences. The ANOVA test assumes that the data follows a normal distribution and that the variances are equal across groups (homogeneity of variances).
+
+```{r}
+anova_result <- aov(sysBP ~ age_category, data = framingham)
+summary(anova_result)
+?aov
+
+```
+
+We should also test the IID Normal assumptions.
+(1) Normality Assumption
+
+```{r}
+# Shapiro-Wilk normality test for each group
+by(framingham$sysBP, framingham$age_category, shapiro.test)
+
+# Q-Q plots for each group
+ggplot(framingham, aes(sample = sysBP)) +
+  facet_wrap(~age_category) +
+  geom_qq() +
+  geom_qq_line()
+```
+
+(2) Test for Homoscedasticity
+
+```{r}
+# Levene's test for homogeneity of variances
+library(car)
+leveneTest(sysBP ~ age_category, data = framingham)
+```
+
+Assumptions seems to be violated. Try non-parametric alternative.
+
+```{r}
+# Kruskal-Wallis test as a non-parametric alternative to ANOVA
+kruskal.test(sysBP ~ age_category, data = framingham)
+```
+
+Conclusion is still the same as for ANOVA

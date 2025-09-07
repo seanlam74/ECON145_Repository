@@ -1,0 +1,163 @@
+---
+title: "Framingham Heart Study Using Linear Regression"
+author: "ECON145 Instructor"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    theme: readable
+    self_contained: TRUE
+    toc: TRUE
+    number_sections: TRUE
+    df_print: paged
+---
+
+```{r global-options, echo = FALSE, message = FALSE}
+knitr::opts_chunk$set(warning = FALSE, 
+                      fig.height = 6,
+                      fig.width = 6,
+                      fig.align = "center")
+```
+
+
+
+# Loading and Exploring the Data Set
+
+
+
+Let's first read the data set from the file. 
+Note: To read from exact folder path, you need to use forward slashes `/` or double backslashes `\\`. 
+E.g.: `framingham <- read.csv("C:\\Users\\Sean\\Documents\\Datasets\\Framingham_Train.csv")`
+
+```{r}
+framingham = read.csv("Framingham_Train.csv")
+str(framingham)
+```
+
+
+Note that R treats all the categorical independent variables as numerical variables in the above data frame, including *male*, *education*, etc. This is due to the fact that these variables were recorded as numerics in the data file instead of text, and you can see that the data types for these variables are all "int" from the above output. However, these variables should be treated as categorical variables, i.e., the "Factor" variable type in R. It does not make sense by saying that *education* of 4 is three units higher than *education* of 1. The distance information encoded in numerical variables (e.g., 4 is 2 units further away from 1 than 2, i.e., (4 - 1) - (2 - 1) = 2) does not carry any real interpretation. In other words, for categorical variables, we can only tell that one category is different from the other category, and there is no meaning of distance between categories in general. Also, if we simply use numbers to distinguish categories in this case, we can also label *education* levels as 0, 3, 10 and 55 instead of 1, 2, 3 and 4. There are infinitely possible ways of labeling using numbers for categorical variables, which is not desirable. Therefore, it is necessary to convert them into the "Factor" type before conducting any analysis.
+
+```{r}
+framingham$male = as.factor(framingham$male)
+framingham$education = as.factor(framingham$education)
+framingham$currentSmoker = as.factor(framingham$currentSmoker)
+framingham$BPMeds = as.factor(framingham$BPMeds)
+framingham$prevalentStroke = as.factor(framingham$prevalentStroke)
+framingham$prevalentHyp = as.factor(framingham$prevalentHyp)
+framingham$diabetes = as.factor(framingham$diabetes)
+str(framingham)
+```
+
+
+```{r}
+library(skimr)
+df_summary <- skim(framingham)
+```
+
+
+
+```{r}
+proportion <- sum(framingham$TenYearCHD == 1) / nrow(framingham)
+print(proportion)
+mean(framingham$TenYearCHD)
+
+```
+
+
+Note that we do not convert the dependent variable, *TenYearCHD*, into the "Factor" type. This is because we will use linear regression models to predict it, which requires the dependent variable to be of numeric type.
+
+# Building Linear Regression Models
+Let's start by creating a one-variable linear regression model using *glucose* to predict *TenYearCHD*. Here we use the 'lm' function, which stands for 'linear model.'
+```{r}
+model1 <- lm(TenYearCHD ~ glucose, data = framingham)
+summary(model1)
+```
+
+
+Please refer to the slides for the interpretation of the regression results.
+
+
+We can plot the regression line of our model, together with the benchmark prediction using the average risk of ten-year coronary heart disease (CHD).
+```{r}
+library(ggplot2)
+
+pred <- ggplot(framingham, aes(x = glucose, y = TenYearCHD)) +
+  geom_point() +
+  geom_hline(yintercept = mean(framingham$TenYearCHD), color = "red") +
+  geom_smooth(method = "lm", se = FALSE, color = "green")
+print(pred)
+```
+
+
+We can see that the plot is a bit weird because the response variable in our model, *TenYearCHD*, is a 0-1 binary variable. The best fit line still appears to be quite far away from the data points, which is expected since we use linear regression. This is one of the reasons that we want to use another technique to predict a binary outcome, called logistic regression, which we will discuss in the next class. Nevertheless, the linear regression model can still generate important insights for our problem, and in practice, there are cases that linear regression models are preferred even for binary outcome prediction.
+
+Now, let's use add all the other independent variables to our linear regression model and check its performance. In the following code, the dot '.' used on the right-hand side of the prediction equation indicates that all the variables in the data frame except the dependent variable are used in the prediction. We should be careful when using this trick. In practice, medical datasets usually include patient ID and name that we would not want to use as independent variables.
+```{r}
+model2 = lm(TenYearCHD ~ ., data = framingham)
+summary(model2)
+```
+
+
+
+
+From the above report, we can observe that some variables are significant in terms of predicting the risk of ten-year CHD, while some are not. It is a common practice to remove insignificant variables, which usually only bring noise into the prediction. In what follows, we construct our third linear regression model using only independent variables that are significant at the 0.1 level. This is called backward elimination.
+```{r}
+model3 = lm(TenYearCHD ~ male + age + cigsPerDay + prevalentStroke + prevalentHyp + totChol + sysBP + glucose, data = framingham)
+summary(model3)
+```
+
+
+Compared to the model using all the independent variables, we can see that our model performance improves in terms of adjusted R-squared, which accounts for the number of independent variables used in the prediction. However, as discussed in the class, R-square makes more sense for models that predict continuous quantities, and it may not be a good performance indicator for our task. We will use more comprehensive accuracy measures when we discuss the logistic regression in the next class. From the above results, we can also observe that the significance levels of the independent variables change a bit after removing insignificant variables. In other words, the effect of significant variables becomes clear in the simplified model.
+
+
+From these analyses, we identify a set of significant variables that represent important risk factors for the ten-year CHD. In future analysis, these variables should be carefully looked into to establish causality and identify effective intervention mechanisms.
+
+
+
+# Testing the Model
+
+
+
+Now let's test our prediction model on the test dataset, which we will read in as a data frame first.
+```{r}
+framinghamTest = read.csv("Framingham_Test.csv")
+str(framinghamTest)
+```
+
+
+Similarly, we need to convert the categorical variables into the "Factor" type. Instead of converting columns one by one, we can also use the 'lapply' function.
+```{r}
+framinghamTest$male = as.factor(framinghamTest$male)
+framinghamTest[,3:4] = lapply(framinghamTest[,3:4], as.factor)
+framinghamTest[,6:9] = lapply(framinghamTest[,6:9], as.factor)
+str(framinghamTest)
+```
+
+
+We can call the 'predict' function to make predictions for the test data points.
+```{r}
+predictTest = predict(model3, newdata = framinghamTest)
+length(predictTest)
+```
+
+
+The variable, *predictTest*, stores the predicted value of *TenYearCHD* for each data point in the test dataset. Hence, *predictTest* is a vector of length = `r nrow(framinghamTest)`. Let's look at some summary statistics of the predicted values.
+```{r}
+summary(predictTest)
+```
+
+
+We can see that most of the predicted values are smaller than 0.5, and it is possible to have predicted values falling outside the range of [0, 1]. To assess the accuracy of our predictions, we can compute the out-of-sample R-squared and out-of-sample root-mean-square error (RMSE). The SST is computed based on the **average training data (historical average)** to avoid data leakage in the training evaluation. 
+```{r}
+SSE = sum((framinghamTest$TenYearCHD - predictTest)^2)
+SST = sum((framinghamTest$TenYearCHD - mean(framingham$TenYearCHD))^2)
+R2 = 1 - SSE/SST
+R2
+```
+
+
+```{r}
+RMSE = sqrt(SSE/nrow(framinghamTest))
+RMSE
+```
+
+

@@ -1,0 +1,82 @@
+---
+title: "Framingham Heart Study Using Linear Regression"
+author: "ECON145 Instructor"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    theme: readable
+    self_contained: TRUE
+    toc: TRUE
+    number_sections: TRUE
+    df_print: paged
+---
+
+
+
+Refer back to the Framingham Heart Study dataset. Load libraries.
+
+```{r}
+library(ggplot2)
+framingham <- read.csv("Framingham.csv")
+str(framingham)
+```
+
+We look at Gender association with the response of "TenYearCHD" without concerning ourselves with the other covariates in a univariate analysis. `framingham$male` captures the gender with male = `1` and female = `0`. We first convert this binary variable into a factor data type.
+
+```{r}
+unique(framingham$male)
+framingham$male = as.factor(framingham$male)
+framingham_small <- framingham[c("male","TenYearCHD")]
+str(framingham_small)
+
+```
+
+Visualize the data with bar chart.
+
+```{r}
+ggplot(data = framingham_small, aes(x = male, fill = factor(TenYearCHD))) +
+  geom_bar(position = "dodge") +
+  labs(x = "Gender", y = "Count", fill = "TenYearCHD") +
+  scale_fill_manual(values = c("0" = "blue", "1" = "red"), labels = c("No CHD", "CHD")) +
+  theme_minimal() +
+  ggtitle("Counts of CHD by Gender")
+```
+
+Visualize the data with stacked bar chart.
+
+```{r}
+ggplot(data = framingham_small, aes(x = male, fill = factor(TenYearCHD))) +
+  geom_bar(position = "fill") +
+  labs(x = "Gender", y = "Proportion", fill = "TenYearCHD") +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_manual(values = c("0" = "blue", "1" = "red"), labels = c("No CHD", "CHD")) +
+  theme_minimal() +
+  ggtitle("Proportion of CHD Occurrence by Gender")
+```
+
+You can also try to visualize with a mosaic plot with the `vcd` package. Mosaic plot is like your contingency table.
+
+```{r}
+library(vcd)
+# Mosaic plot for visualizing the association between gender and CHD
+mosaic(~ male + TenYearCHD, data = framingham_small,
+       main = "Mosaic Plot of CHD Occurrence by Gender",
+       xlab = "Gender",
+       ylab = "TenYearCHD",
+       color = TRUE)
+
+```
+
+Summarize the data into a contingency table then call the `chi.sq` test.
+```{r}
+framingham_small$gender <- factor(framingham_small$male, levels = c(0, 1), labels = c("female", "male"))
+framingham_small$TenYearCHD <- factor(framingham_small$TenYearCHD, levels = c(0, 1), labels = c("NoCHD", "CHD"))
+
+# Chi-squared codes
+tableCHD <- table(framingham_small$gender, framingham_small$TenYearCHD)
+tableCHD
+chisq.test(tableCHD)
+```
+
+Congratulations! You have successfully learnt how to conduct a simple chi-squared test for categorical variables.
+

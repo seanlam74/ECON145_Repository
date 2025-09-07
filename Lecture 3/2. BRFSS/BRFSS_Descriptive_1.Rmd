@@ -35,10 +35,7 @@ This instructional notebook walks you through an end-to-end analysis of asthma u
 library(dplyr)
 library(ggplot2)
 library(readr)
-library(forcats)
-library(scales)
 library(plotly)
-library(rlang)
 
 # Set a reproducible theme
 theme_set(theme_minimal(base_size = 14))
@@ -255,8 +252,10 @@ valid_smoker <- c("Current smoker (every day)",
 df_smoker <- df_asthma %>%
   filter(`_SMOKER3` %in% valid_smoker) %>%
   mutate(`_BMI5` = as.numeric(`_BMI5`)) %>%
-  filter(is.na(`_BMI5`) | `_BMI5` < 50) %>%   # keep NA or BMI < 50
-  droplevels()
+  filter(!is.na(`_BMI5`) & `_BMI5` < 50) %>%   
+  droplevels()          # remove NA or BMI > 50
+
+sum(is.na(df_smoker$`_BMI5`))
 
 ggplot(df_smoker, aes(x = `_SMOKER3`, y = `_BMI5`, fill = `_SMOKER3`)) +
   geom_boxplot() +
@@ -294,18 +293,15 @@ df_asthma <- df_asthma %>% mutate(`_STATE` = as.integer(`_STATE`))
 df_asthma <- df_asthma %>%
   left_join(fips_mapping, by = c("_STATE" = "STATE"))
 
-# 6.4 Keep only variables of interest for state analysis (optional simplification)
-df_state <- df_asthma %>% select(ASTHMA3, `_STATE`, STUSAB, STATE_NAME)
-
-# 6.5 Create a cleaned Yes/No variable for aggregation
-df_state <- df_state %>%
+# 6.4 Create a cleaned Yes/No variable for aggregation
+df_state <- df_asthma %>%
   mutate(ASTHMA3_clean = case_when(
     ASTHMA3 %in% c("Yes") ~ "Yes",
     ASTHMA3 %in% c("No")  ~ "No",
     TRUE ~ NA_character_
   ))
 
-# 6.6 Aggregate by state
+# 6.5 Aggregate by state
 state_summary <- df_state %>%
   group_by(STUSAB) %>%
   summarise(
@@ -316,7 +312,7 @@ state_summary <- df_state %>%
   mutate(Proportion = Yes / Total) %>%
   left_join(df_state %>% distinct(STUSAB, STATE_NAME), by = "STUSAB")
 
-# 6.7 Plotly choropleth (USA)
+# 6.6 Plotly choropleth (USA)
 fig <- plot_ly(
   data = state_summary,
   type = "choropleth",

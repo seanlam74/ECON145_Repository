@@ -1,0 +1,269 @@
+---
+title: "Advanced EDA on World Health Statistics"
+author: "ECON145 Instructors"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    df_print: paged
+    number_sections: yes
+    theme: readable
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+# Install Packages
+
+The package **ggplot2** is free and open source data visualization package for the statistical programming language R. It makes it simple to create complex plots from data in a data frame. It provides a more programmatic interface for specifying what variables to plot, how they are displayed, and general visual properties.
+
+GGPlot2 is contained in the Tidyverse collection of R packages, which contains a collection of R packages designed for data science. Reference: https://www.tidyverse.org/ 
+
+Install ggplot2 in console by using the command "install.packages("ggplot2")"
+
+# Load the Data File
+
+Now let us read the data file using "read.csv" function. We have set the argument stringAsFactors to FALSE so that any string characters will be converted to character data type instead of staying as a factor, for the 'Country' and 'Region' column in this case. 
+```{r}
+data <- read.csv("cleaned_WHS_2019.csv", stringsAsFactors = FALSE)
+str(data)
+```
+
+# Advanced Plots using ggplot2 library
+
+## Bar chart 
+
+We will demonstrate how to plot a bar chart of "Total Population in Each Country".
+
+We will be using the "ggplot2" package to plot the bar charts so we need to install and load the "ggplot2" package first.
+```{r}
+library(ggplot2)
+```
+
+To prevent cluttering the chart, we are going to reduce to just 15 countries (15 countries with smallest population). First, we need to install and load the "dplyr" and "tidyr" packages for data manipulation.
+```{r}
+library(dplyr)
+library(tidyr)
+```
+
+We order the data using the Total_Pop variable, then slice the data to the smallest 15 countries in terms of population. We keep the output of the data in data_15 data frame. 
+```{r}
+data_15 <- data[order(data$Total_Pop), ] %>%
+  slice(1:15)
+
+# Print a few rows to have a look
+head(data_15)
+```
+
+Plotting the barplot. We need at least three things to create a plot using ggplot---(1) data, (2) an aesthetic mapping of variables in the data frame to visual output, and (3) a geometric object. First, let us create the 'ggplot' object with the data and the aesthetic mapping.
+
+As we are plotting the bar chart, we will use the geom_bar function. 
+
+By default, geom_bar uses stat="bin" . This makes the height of each bar equal to the number of cases in each group, and it is incompatible with mapping values to the y aesthetic. If you want the heights of the bars to represent values in the data, use stat="identity" and map a value to the y aesthetic (aes), in this case we map "data_15$Total_Pop".
+
+"Fill" is the colour of your bar charts, 'steelblue' is used in this case. 
+See https://www.graphviz.org/doc/info/colors.html for more colors.
+```{r}
+# Basic barplot
+p <-ggplot(data_15, aes(x=Country, y=Total_Pop)) +
+  geom_bar(stat="identity", fill="steelblue") 
+p
+```
+
+Notice the labels on X-axis are too cluttered, we can slant the labels 45 degrees for better visibility using the theme function. 
+
+axis.text.x refers to the x axis which is the axis you are trying to modify. 
+angle is the degree in which you want to slant your labels. 
+hjust can take either value 0 (left-justified) or 1 (right-justified). 
+```{r}
+p <- p + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+p
+```
+
+To label your population values on each bar, you can add *geom_text*. 
+'label' is the values that you are using to label your bars,
+'vjust' is the position of your label and lastly, 
+'size' is the font size of your labels.
+```{r}
+p <- p + geom_text(aes(label= Total_Pop), vjust=-0.3, size=3)
+p
+```
+
+If you would like to give better labels for both your axis, use the xlab and ylab functions.
+
+To add a title, simply use the ggtitle function to add a meaningful title for your plot. 
+```{r}
+p <- p + xlab("Countries") + ylab("Total Pop. in 000s") +
+  ggtitle("15 Smallest Countries by Population") 
+p
+```
+
+
+Exercise: Now try plot a barchart for another variable. 
+
+```{r}
+p <-ggplot(data_15, aes(x=Country, y=Health_Exp_Per_Capita)) +
+              geom_bar(stat="identity", fill="steelblue") +
+              theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+              geom_text(aes(label= Health_Exp_Per_Capita), vjust=-0.3, size=3) +
+              xlab("Countries") + ylab("Health Expenditure per Capita") +
+              ggtitle("Health_Exp_Per_Capita of 15 Smallest Countries")
+  
+p
+```
+
+## Stacked Bar Chart
+
+We will be demonstrating how to plot a stacked bar chart of "Total Male/Female Populaton in Each Country (Smallest 15 countries)".
+
+We will reuse the 15 smallest countries data we have sliced above. We will next build a data frame which contains all the countries and their respective number of males and females by combining the "Male" and "Female" columns using `rbind`. 
+
+We create another column lab_ypos to get a nice position for labeling our y values in the stacked bar chart. There is an easier way to do this without the need for an additional column to specify the label position. 
+```{r}
+Countries <- data_15$Country
+
+df_pop <- rbind(
+            data.frame(Countries, "count" = data_15$Male, "gender"="Male"),
+            data.frame(Countries, "count" = data_15$Female, "gender"="Female")) %>%
+          group_by(Countries) %>%
+          mutate(lab_ypos = cumsum(count) - 0.5 * count)
+df_pop
+```
+
+Now we can plot the stacked bar chart. Notice we split the bar chart by `fill = gender`. Also we use "identity" for `geom_bar` "stat" parameter as we want the heights of the bars to represent values in the data. 
+
+We also use the precalculated postion "lab_ypos" to position our label at the center of each coloured bar. Or we can simply use specify "position = position_stack(vjust = 0.5)"
+```{r}
+ggplot(df_pop, aes(x= Countries, y=count, fill=gender)) +
+    geom_bar(stat="identity") +
+    geom_text(aes(y = lab_ypos, label = count), color = "white") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    ggtitle("Count of 15 Smallest Countries")
+```
+
+Exercise: Plot a stacked bar chart for another variable. 
+```{r}
+df_pop <- data_15 %>% 
+          group_by(Region) %>%
+          summarise(
+            Male = sum(Male, na.rm = TRUE),
+            Female = sum(Female, na.rm = TRUE)) %>%
+          pivot_longer(cols = c(Male, Female), names_to = "Gender", values_to = "Count") %>%
+          mutate(lab_ypos = cumsum(Count) - 0.5 * Count)
+
+ggplot(df_pop, aes(x= Region, y=Count, fill=Gender)) +
+    geom_bar(stat="identity") +
+    geom_text(aes(label = Count), position = position_stack(vjust = 0.5), color = "black", size = 3) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+    ggtitle("Count by Regions for 15 Smallest Countries")
+
+```
+
+## Line Chart
+
+We will be demonstrating how to plot a line chart of "Life Expectancy vs. Health Expenditure Per Capita" below using ggplot. Notice that instead of `geom_bar`, we use `geom_line` now. 
+
+```{r}
+ggplot(data=data, aes(x=Health_Exp_Per_Capita, y=Life_Expectancy_Both)) +
+  geom_line() + 
+  xlab("Health Expenditure Per Capita") + ylab("Life Expectancy") +
+  ggtitle("Trend of Life Expectancy Vs. Health Expenditure Per Capita")
+```
+
+Notice that the line chart is broken due to missing values, hence we will use the "tidyr" package loaded earlier which allows us to clean the missing values by dropping the observations with missing values. 
+
+```{r}
+data_clean <- data %>% drop_na(Life_Expectancy_Both, Health_Exp_Per_Capita)
+
+ggplot(data=data_clean, aes(x=Health_Exp_Per_Capita, y=Life_Expectancy_Both, group=1)) +
+  geom_line()+
+  xlab("Health Expenditure Per Capita") + ylab("Life Expectancy") +
+  ggtitle("Trend of Life Expectancy Vs. Health Expenditure Per Capita")
+```
+
+## Heatmap
+
+Heatmap is useful if we have many variables that we want to compare. Think of it as a matrix table.
+
+We will be demonstrating how to do a heatmap whereby we compare the number of males, number of females, life expectancy, heart disease proportion in each region. 
+
+As each row in the data represents a country's statistics, we will do an aggregation of the data by regions first. 
+
+First we find the average life expectancy and heart disease proportion in each region
+
+```{r}
+data_agg <- data %>%
+            group_by(Region) %>%
+            summarise(
+              Avg_Life_Expectancy = mean(Life_Expectancy_Both, na.rm = TRUE),
+              Avg_Heart_Disease = mean(Heart_Disease_Total, na.rm = TRUE))
+```
+
+Now we plot the heatmap using ggplot. To use ggplot, we need to have a long-format dataframe where the column names are in a column "Variable" and the values are in column "Value". `pivot_longer` is from the tidyr package.
+
+```{r}
+data_agg_long <- data_agg %>%
+  pivot_longer(cols = c(Avg_Life_Expectancy, Avg_Heart_Disease),
+               names_to = "Variable", values_to = "Value")
+```
+
+Now we are ready to plot the heatmap using ggplot. 
+
+```{r}
+p <- ggplot(data_agg_long, aes(x = Variable, y = Region, fill = Value)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "steelblue",               
+                      limits = c(0, 100),  # Adjust these limits based on your data range
+                      breaks = seq(0, 100, by = 10)) +
+  labs(title = "Heatmap across Avg Life Expectancy and % Heart Disease",
+       x = "Variables",
+       y = "Region") +
+  theme_minimal()
+p
+```
+
+The colors did not show up clearly due to the scale of differences. We can change the high color to red by replacing the original `scale_fill_gradient` with a new configuration. We can also add labels with the he `geom_text` function. The `sprintf("%.1f", Value)` formats the label to show one decimal place. Adjust the size and color parameters in `geom_text` to customize the appearance of the labels. The `vjust` parameter controls the vertical alignment of the labels.
+
+```{r}
+p <- p +  geom_text(size = 3, color = "black", aes(label = sprintf("%.1f", Value)), vjust = 1) +
+          scale_fill_gradient(
+              low = "white",
+              high = "red",
+              limits = c(0, 100),  # Adjust these limits based on your data range
+              breaks = seq(0, 100, by = 10)
+          ) 
+p
+```
+
+Exercise: Try plotting a heatmap on "Total Male" and "Total Female" variables. 
+Remember you need to pivot to a long format for ggplot to work.
+```{r}
+data_agg_pop <- data %>%
+            group_by(Region) %>%
+            summarise(
+              Total_Male = sum(Male, na.rm = TRUE),
+              Total_Female = sum(Female, na.rm = TRUE))
+
+data_agg_pop_long <- data_agg_pop %>%
+  pivot_longer(cols = c(Total_Male, Total_Female),
+               names_to = "Variable", values_to = "Value")
+
+ggplot(data_agg_pop_long, aes(x = Variable, y = Region, fill = Value)) +
+  geom_tile() +
+  geom_text(size = 3, color = "black", aes(label = sprintf("%.1f", Value)), vjust = 1) +
+  scale_fill_gradient(
+              low = "white",
+              high = "red",
+              limits = c(350000, 1100000),  # Adjust these limits based on your data range
+              breaks = seq(350000, 1500000, by = 100000)
+          ) +
+  labs(title = "Heatmap of Population across Gender",
+       x = "Variables",
+       y = "Region") +
+  theme_minimal()
+
+```
+
+
+
+
+

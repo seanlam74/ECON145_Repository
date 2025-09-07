@@ -1,0 +1,361 @@
+---
+title: "Framingham Heart Study Using Logistic Regression"
+author: "ECON145 Instructor"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    theme: readable
+    self_contained: TRUE
+    toc: TRUE
+    number_sections: TRUE
+    df_print: paged
+---
+
+```{r global-options, echo = FALSE, message = FALSE}
+knitr::opts_chunk$set(warning = FALSE, 
+                      fig.height = 6,
+                      fig.width = 6,
+                      fig.align = "center")
+```
+
+
+
+# Loading and Exploring the Data Set
+Let's first read the data set from the file. 
+```{r}
+framingham = read.csv("Framingham.csv")
+str(framingham)
+```
+
+
+As we have learned before, we should convert the categorical variables to the "Factor" type in R. 
+```{r}
+framingham$male = as.factor(framingham$male)
+framingham[,3:4] = lapply(framingham[,3:4], as.factor)
+framingham[,6:9] = lapply(framingham[,6:9], as.factor)
+str(framingham)
+```
+
+Note that we have not yet converted the dependent variable, *TenYearCHD*, into the "Factor" type. We will first revisit the results from linear regression and then compare them with those from logistic regression.
+
+
+Let's first check the percentage of missing values in each variable.
+```{r}
+sapply(framingham, function(x) 100*sum(is.na(x))/nrow(framingham))
+
+library(skimr)
+skim(framingham)
+```
+
+
+For this class demonstration, let's delete those observations with missing values. In practice, we must be careful in handling missing values.
+```{r}
+framingham = na.omit(framingham)
+str(framingham)
+```
+
+
+We can see how many individuals developed coronary heart disease (CHD) in ten years and how many individuals did not by using the 'table' function.
+```{r}
+table(framingham$TenYearCHD)
+
+# using dplyr:
+library(dplyr)
+frequency_table <- framingham %>%
+                  count(TenYearCHD)
+  
+# View the results
+print(frequency_table)
+
+```
+
+
+The percentage of individuals who developed CHD in ten years can be computed as follows.
+```{r}
+percCHD = sum(framingham$TenYearCHD)/nrow(framingham)
+percCHD
+mean(framingham$TenYearCHD)
+```
+
+
+
+# Splitting the Data Set for Training and Testing
+
+
+
+In the previous class, we were given two data files, one for model training and the other for model testing. In this case, we only have one data set, so the common practice is to randomly split the data set into a training set and a test set, where the test set is used to measure the out-of-sample accuracy of our model. To do this, we need to install a new package to R and load it, called "caTools". As before, you can type 'install.packages("ROCR")' in the Console, and then load the package using the 'library' function.
+```{r echo = TRUE, message = FALSE, warning = FALSE}
+library(caTools)
+```
+
+
+Now, let's use this package to randomly split our data into a training set and a test set. We will do this by using a function called 'sample.split', which is part of the "caTools" package. Since this function randomly splits your data, it could split it differently for each of us. To make sure that we all get the same split, we can set our seed to the same number.
+```{r}
+set.seed(123)
+split = sample.split(framingham$TenYearCHD, SplitRatio = 0.70)
+split[1:20]
+```
+
+
+The first argument in the 'sample.split' function makes sure that in the training set, around `r round(100*percCHD, digits = 2)`% of the individuals developed CHD in ten years, and in the test set `r round(100*percCHD, digits = 2)`% of the individuals developed CHD in ten years. In other words, the *TenYearCHD* variable is balanced in training and test sets. We want to do this so that our test set is representative of the training set. 
+
+
+The split function creates a TRUE or FALSE value for each of our observations. TRUE means that we should put that observation in the training set, and FALSE means that we should put that observation in the test set. Now let's create our training and test sets using the 'subset' function.
+```{r}
+framinghamTrain = subset(framingham, split == TRUE)
+framinghamTest = subset(framingham, split == FALSE)
+```
+
+
+We can check the number of data points in the training set and the test set, and confirm that the fractions of individuals who developed CHD in ten years are indeed similar to the whole dataset.
+```{r}
+table(framinghamTrain$TenYearCHD)
+sum(framinghamTrain$TenYearCHD)/nrow(framinghamTrain)
+table(framinghamTest$TenYearCHD)
+sum(framinghamTest$TenYearCHD)/nrow(framinghamTest)
+```
+
+
+
+# Building Linear Regression Models
+
+
+
+Recall the linear regression model of using all the independent variables.
+```{r}
+linModel = lm(TenYearCHD ~ ., data = framinghamTrain)
+summary(linModel)
+```
+
+
+From the above report, we can observe a list of variables that are significant in terms of predicting the risk of developing CHD in ten years.
+
+
+
+# Building Logistic Regression Models
+
+
+
+Similar to building the above linear regression model, let's now build a logistic regression model using all the variables in the data set other than the dependent variable as independent variables. Before that, we need to convert the dependent variable into the "Factor" type to avoid some issues in the analysis later. In the code below, we use the function, 'glm', which stands for generalized linear model. The argument, *family = binomial*, indicates that we are trying to predict two possible outcomes so that the logistic regression model will be called from the class of generalized linear models.
+```{r}
+framinghamTrain$TenYearCHD = as.factor(framinghamTrain$TenYearCHD)
+logModel1 = glm(TenYearCHD ~ ., data = framinghamTrain, family = "binomial")
+summary(logModel1)
+```
+
+The model output is also similar to a linear regression model. The AIC value is a measure of the quality of the model and is like the adjusted R-squared in that it accounts for the number of variables used compared to the number of observations. It provides a means for model selection, but one can only use it to compare models built on the same data set. The preferred model is the one with the minimum AIC. 
+
+The last line has to do with the algorithm (Newton-Raphson algorithm or Newton's Method by default) that is used to find the coefficients (through solving an optimization problem). This information on AIC and algorithm will not be tested.
+
+We can observe that the logistic regression model reveals almost the same set of significant independent variables with slight differences in significance levels, which is typically the case (not theoretically guaranteed). 
+
+
+1. We can further refine the model by only including the significant effects before testing the model with the `Test` data set. Let's construct another logistic regression model using only independent variables that are significant at the 0.1 level from the above model. This is known as **Stepwise Regression**.
+```{r}
+logModel2 = glm(TenYearCHD ~ male + age + cigsPerDay + totChol + sysBP + glucose, data = framinghamTrain, family = "binomial")
+summary(logModel2)
+```
+
+
+# In-Sample Model Performance
+## Sensitivity and Specificity
+
+
+We can now make predictions on the **training set**. The argument *type = "response"* in the code below makes sure that the algorithm uses the logistic response function to compute the predictions, which should be numbers between 0 and 1. You can try removing this argument and see what you get.
+```{r}
+predictTrain = predict(logModel2, type = "response") 
+#If type = "link" were used instead, it would return the linear predictor values (log-odds).
+
+summary(predictTrain)
+predictTrain[1:20]
+```
+
+
+Let's take a look at the predicted probabilities of developing CHD in ten years for the first ten individuals in the training set, and compare them to the actual observations.
+```{r}
+predictTrain[1:10]
+framinghamTrain$TenYearCHD[1:10]
+```
+
+
+Note that the indices in the display of the first ten elements in *predictTrain* correspond to the indices of individuals in the original data frame before random splitting into the training and test sets. You can confirm this by referring the output from displaying *split* in the above code chunk.
+
+
+Let's see if the model is predicting higher probabilities for the actual CHD cases as we expect.
+```{r}
+tapply(predictTrain, framinghamTrain$TenYearCHD, mean)
+```
+
+
+If we use 0.5 as the threshold, we get the following confusion matrix.
+The table() function in R creates a contingency table (confusion matrix) that compares the actual outcomes (framinghamTrain$TenYearCHD) with the predicted outcomes (predictTrain > 0.5).
+
+```{r}
+conf05 = table(framinghamTrain$TenYearCHD, predictTrain > 0.5)
+conf05
+```
+We can calculate the Sensitivity and Specificity.
+Note: R can use different ways of indexing a matrix or table, depending on the structure of the object. 
+- 1 dimensional indexing : conf05[1] (1-dimensional indexing,, matrices and tables are stored in a column-major order, meaning that elements are stored and accessed column by column.)
+- 2 dimensional indexing : conf05[1, 1]  
+
+
+```{r}
+
+conf05[1]
+conf05[2]
+conf05[3]
+conf05[4]
+
+TN <- conf05[1, 1]  
+FP <- conf05[1, 2] 
+FN <- conf05[2, 1]
+TP <- conf05[2, 2]
+
+accuracy <- (TP + TN) / (TP + TN + FP + FN)
+sensitivity <- TP / (TP + FN)
+specificity <- TN / (TN + FP)
+
+cat("Accuracy:", accuracy, "\n")
+cat("Specificity:", specificity, "\n")
+cat("Sensitivity:", sensitivity)
+
+```
+
+We can see that for `r conf05[1,1]` cases, we predict no CHD, and they did not develop CHD; and for `r conf05[2,2]` cases, we predict CHD, and they developed CHD. We make `r conf05[3]` mistakes where we say CHD, and we make `r conf05[2]` mistakes where we say no CHD. The accuracy of the prediction using 0.5 as the threshold is `r conf05[1] + conf05[4]`/`r nrow(framinghamTrain)` = `r round(100*(conf05[1] + conf05[4])/nrow(framinghamTrain), digits = 2)`%.
+
+
+We can compute the sensitivity, or the true positive rate, which equals to `r conf05[4]`/`r conf05[2] + conf05[4]` = `r round(conf05[4]/(conf05[2] + conf05[4]), digits = 2)`, and the specificity, or the true negative rate, which equals to `r conf05[1]`/`r conf05[1] + conf05[3]` = `r round(conf05[1]/(conf05[1] + conf05[3]), digits = 2)`.
+
+
+Let's try increasing the threshold to 0.7.
+```{r}
+conf07 = table(framinghamTrain$TenYearCHD, predictTrain > 0.7)
+conf07
+```
+```{r}
+TN <- conf07[1, 1]  
+FP <- conf07[1, 2] 
+FN <- conf07[2, 1]
+TP <- conf07[2, 2]
+
+accuracy <- (TP + TN) / (TP + TN + FP + FN)
+sensitivity <- TP / (TP + FN)
+specificity <- TN / (TN + FP)
+
+cat("Accuracy:", accuracy, "\n")
+cat("Specificity:", specificity, "\n")
+cat("Sensitivity:", sensitivity)
+```
+Now the sensitivity equals to `r conf07[4]`/`r conf07[2] + conf07[4]` = `r round(conf07[4]/(conf07[2] + conf07[4]), digits = 2)`, and the specificity equals to `r conf07[1]`/`r conf07[1] + conf07[3]` = `r round(conf07[1]/(conf07[1] + conf07[3]), digits = 2)`. By increasing the threshold, our sensitivity goes down, and our specificity goes up. We can also try decreasing the threshold to 0.2.
+
+```{r}
+conf02 = table(framinghamTrain$TenYearCHD, predictTrain > 0.3)
+conf02
+```
+```{r}
+TN <- conf02[1, 1]  
+FP <- conf02[1, 2] 
+FN <- conf02[2, 1]
+TP <- conf02[2, 2]
+
+accuracy <- (TP + TN) / (TP + TN + FP + FN)
+sensitivity <- TP / (TP + FN)
+specificity <- TN / (TN + FP)
+
+cat("Accuracy:", accuracy, "\n")
+cat("Specificity:", specificity, "\n")
+cat("Sensitivity:", sensitivity)
+```
+
+Now the sensitivity equals to `r conf02[4]`/`r conf02[2] + conf02[4]` = `r round(conf02[4]/(conf02[2] + conf02[4]), digits = 2)` and the specificity equals to `r conf02[1]`/`r conf02[1] + conf02[3]` = `r round(conf02[1]/(conf02[1] + conf02[3]), digits = 2)`. By decreasing the threshold, our sensitivity goes up, and our specificity goes down.
+
+
+## Receiver Operating Characteristic (ROC) Curves
+
+
+To generate receiver operating characteristic (ROC) curves in R, we need to install a new package, called "ROCR."
+```{r echo = TRUE, message = FALSE, warning = FALSE}
+library(ROCR)
+```
+
+
+Recall that we made predictions on our training set and called them *predictTrain*. We will use these predictions to create our ROC curve.
+```{r fig.height = 6, fig.width = 6, fig.align = "center"}
+ROCRpred = prediction(predictTrain, framinghamTrain$TenYearCHD)
+ROCRperf = performance(ROCRpred, "tpr", "fpr")
+plot(ROCRperf)
+```
+
+
+We can add more visual effects to the ROC plot.
+```{r}
+plot(ROCRperf, colorize = TRUE, print.cutoffs.at = seq(0,1,0.1), text.adj = c(-0.2,1.7))
+```
+
+
+Now let's compute the area under the ROC curve (AUROC), or simply AUC.
+```{r}
+ROCRauc = performance(ROCRpred, "auc")
+ROCRauc@y.values
+```
+
+
+There are other packages available for plotting ROC, and they offer different features that may be useful in some situations. For example, if we want to color the area under the ROC curve, we can use the 'plot.roc' function in the "pROC" package. Remember to install this package before the first use.
+```{r message = FALSE}
+library(pROC)
+plot.roc(framinghamTrain$TenYearCHD, predictTrain,
+    xlim=c(1,0),
+    ylim=c(0,1),
+    auc.polygon = TRUE, 
+    auc.polygon.col=rgb(.35,0.31,0.61, alpha = 0.4), 
+    auc.polygon.border=rgb(.35,0.31,0.61, 0.4))
+```
+
+
+Note that by default, the x-axis for the 'plot.roc' function is specificity, which equals (1 - false-positive rate), and the numbers go from 1 to 0 from left to right.
+
+
+
+# Out-of-Sample Model Performance
+
+
+
+Similarly, we can perform the out-of-sample test for our model using the test data set.
+```{r}
+predictTest = predict(logModel2, type = "response", newdata = framinghamTest)
+conf03out = table(framinghamTest$TenYearCHD, predictTest > 0.3)
+conf03out
+```
+The out-of-sample accuracy of the model with threshold 0.3 is `r conf03out[1,1] + conf03out[2,2]`/`r nrow(framinghamTest)` = `r round(100*(conf03out[1,1] + conf03out[2,2])/nrow(framinghamTest), digits = 2)`%. We can also plot the out-of-sample ROC of the model and compute its out-of-sample AUC. 
+```{r}
+ROCRpredTest <- prediction(predictTest, framinghamTest$TenYearCHD)
+ROCRperfTest <- performance(ROCRpredTest, "tpr", "fpr")
+
+plot(ROCRperfTest, colorize = TRUE, print.cutoffs.at = seq(0,1,0.2), text.adj = c(-0.2,1.7))
+
+ROCRperfAUC <- performance(ROCRpredTest, "auc")
+cat("Area Under the Receiver Operating Curve (AUROC):", ROCRperfAUC@y.values[[1]], "\n")
+
+```
+
+
+The out-of-sample AUC of our model is `r as.numeric(performance(ROCRpredTest, "auc")@y.values)`.
+
+We can also plot the out-of-sample Precision-Recall Curve of the model and compute its out-of-sample AUPRC. The ROCR package can still be used. Instead of plotting the TPR against the FPR, we can plot `Precision` vs `Recall`. Again the `performance` function calculates the AUPRC automatically. Specify `prec` for precision and `rec` for recall.
+
+```{r}
+ROCRperfPR <- performance(ROCRpredTest, "prec", "rec")
+plot(ROCRperfPR, colorize = TRUE, print.cutoffs.at = seq(0,1,0.2), text.adj = c(-0.2,1.7))
+
+ROCRperfAUC <- performance(ROCRpredTest, measure = "aucpr")
+cat("Area Under the Precision-Recall Curve (AUPRC):", ROCRperfAUC@y.values[[1]], "\n")
+
+auprc <- performance(ROCRpredTest, measure = "aucpr")
+
+performance(ROCRpredTest, measure = "aucpr")@y.values[[1]]
+```
+
+The out-of-sample AUPRC of our model is `r as.numeric(performance(ROCRpredTest, measure = "aucpr")@y.values[[1]])`. This is much worse than the AUROC due to the imbalanced nature of the dataset where the proportion of positive cases is `r sum(framinghamTrain$TenYearCHD == 1) / length(framinghamTrain$TenYearCHD)`.
+
+
