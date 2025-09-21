@@ -1,0 +1,219 @@
+---
+title: "Effectiveness of Renal Replacement Therapy (RRT)"
+author: "ECON145 Instructor"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    theme: readable
+    self_contained: TRUE
+    toc: TRUE
+    number_sections: TRUE
+    df_print: paged
+---
+
+
+
+# Loading and Exploring the Data File
+
+```{r}
+library(dplyr)
+library(MatchIt)
+?MatchIt
+```
+
+
+Let's first read the data set from the file.
+```{r}
+rrt = read.csv("RRT.csv")
+
+str(rrt)
+```
+
+
+Let's see how many patients received renal replacement therapy (RRT) in the intensive care unit (ICU) by using the dplyr::count function instead of the base R 'table' function.
+```{r}
+
+rrt %>% count(RRT)
+```
+
+
+Since the variable *RRT* takes a value of 1 if the patient received RRT, and 0 otherwise, the table above that summarizes the counts for the variable *RRT* shows that `r sum(rrt$RRT)` patients in our data set received RRT. Next, we can check the in-hospital mortality rates in these two groups of patients. 
+```{r}
+
+rrt %>%
+  group_by(RRT) %>%
+  summarise(Mean_Mortality = mean(Mortality, na.rm = TRUE))
+```
+
+
+The 'tapply' function can also be used to group the patients according to *RRT* and then computes the mean of the variable *Mortality* for each value of the *RRT* variable: `tapply(rrt$Mortality, rrt$RRT, mean)`.  We use dplyr here for ease of coding and understanding the codes. 
+
+Recall that the 'tapply' function applies whatever function name you put as the third argument, in the above case, 'mean,' on the value of the first argument, *rrt\$Mortality*, and then sorts the data by *rrt\$RRT*, the second argument. 
+
+From the statistics, we can see that patients who received RRT had a in-hospital mortality rate of `r round(mean(subset(rrt, RRT == 1)$Mortality), digits = 4)`, which is much higher compared to the mortality rate of the patients who did not receive RRT, `r round(mean(subset(rrt, RRT == 0)$Mortality), digits = 4)`. Does this imply that RRT is a poor treatment option? Shall we recommend physicians to stop using RRT? 
+
+From what we learned from the class, the answers to these questions are 'NO,' at least not from the above statistics. There is a serious selection bias in the data---physicians were more likely to initiate RRT for patients with worse health conditions, which could be the main reason behind the high mortality rate. 
+
+We can check whether there is any significant difference between the patients who received RRT and those who did not receive RRT in terms of their ages, Acute Kidney Injury Network (AKIN) classification [The AKIN classification measures the severity of acute kidney injury (AKI), from Stage 0 to 3, with 3 being the worst stage], and sequential organ failure assessment (SOFA) score [The SOFA score is used to track a person's status during the stay in the ICU to determine the extent of a person's organ function or rate of failure. It is a number between 0 and 24 with 24 representing the worst condition] 
+
+```{r}
+rrt %>%
+  group_by(RRT) %>%
+  summarise(
+    Mean_Age = mean(Age, na.rm = TRUE),
+    Mean_AKIN = mean(AKIN, na.rm = TRUE),
+    Mean_SOFA = mean(SOFA, na.rm = TRUE)
+  )
+```
+
+
+From the above tables, we can see that indeed, there are quite obvious differences between these two groups of patients. In particular, patients who received RRT were older (`r round(mean(subset(rrt, RRT == 1)$Age), digits = 2)` vs. `r round(mean(subset(rrt, RRT == 0)$Age), digits = 2)`) and had much higher AKIN classification (`r round(mean(subset(rrt, RRT == 1)$AKIN), digits = 2)` vs. `r round(mean(subset(rrt, RRT == 0)$AKIN), digits = 2)`) and SOFA scores (`r round(mean(subset(rrt, RRT == 1)$SOFA), digits = 2)` vs. `r round(mean(subset(rrt, RRT == 0)$SOFA), digits = 2)`). You can use some statistical tests to confirm that these differences are statistically significant.
+
+Using `tapply` requires 3 calls: 
+`tapply(rrt$Age, rrt$RRT, mean)`; `tapply(rrt$AKIN, rrt$RRT, mean)` ;`tapply(rrt$SOFA, rrt$RRT, mean)`. 
+You can also combine them into 1 table using `groupby` and `summarize` from the `dplyr` package.
+
+We can further confirm the selection bias by looking at the percentage of patients who received RRT at different AKIN classification stages.
+```{r}
+
+rrt %>%
+  group_by(AKIN) %>%
+  summarise(Mean_RRT = mean(RRT, na.rm = TRUE))
+```
+
+
+We can see that indeed, patients in worse conditions were more likely to receive RRT.
+ 
+The full proportion information can be computed as follows:
+
+```{r}
+rrt %>%
+  group_by(AKIN) %>%
+  count(RRT) %>%
+  mutate(Proportion = n / sum(n)) %>%
+  ungroup()
+```
+
+
+# Matching Patients for Better Comparison
+
+
+
+Now we will use the propensity score matching (PSM) to find appropriate matching between patients who received  RRT and those who did not. To do this, we need to add a new package to R. There are many functions and algorithms built into R, but there are many more that you can install. We will do this several times throughout this course. In the Rstudio interface, you can type in Console to install any packages. Let's type 'install.packages("MatchIt")' and hit Enter.
+
+
+Now we are ready to load the package into our current R session by using the command 'library(MatchIt)'.
+```{r echo = TRUE, message = FALSE, warning = FALSE}
+library(MatchIt)
+```
+
+
+Sometimes we will get a warning message based on the version of R that we are using. This can usually be safely ignored. You can use various chunk options to suppress the warning messages. You can check the first code chunk at the beginning of this document for setting global options that include muting any warning messages. In the future, whenever you want to use a package, you do not need to install it again, but you will need to load it.
+
+
+The following command uses the nearest neighbor matching method to match a patient who received RRT to the nearest patient in terms of a distance measure such as logit, which we will discuss in future classes. The argument *ration = 1* indicates one-to-one matching---every treatment case (i.e., patient who received RRT) will be matched to one control case (i.e., patient who did not receive RRT). Since we only use two variables (*AKIN* and *Age*) to generate the matching from this simplified data set, it is possible to have multiple equally good matchings, and R may randomly report one due to the nature of nearest neighbor matching. 
+
+To make sure that we all get the same matching, we can set our seed to the same number. The seed initializes the random number generator. Fixing the seed is important not only to make sure we all get the same results later but also to make it easier to check your work in the future. We will use this feature again and again in this course, and you will be familiar with it.
+
+method = `nearest`specifies that nearest neighbor matching should be used. Nearest neighbor matching identifies for each treated unit the untreated unit(s) that are closest in terms of the covariates.
+```{r}
+set.seed(15)
+matching = matchit(RRT ~ AKIN + Age, data = rrt, method = "nearest", ratio = 1)
+result = summary(matching)
+result
+```
+
+
+The results show that matching generally worked well for this data set. 
+
+Before matching, the mean AKIN classification in the group of patients who received RRT (i.e., treatment group) was `r round(result[["sum.all"]][2,1] - result[["sum.all"]][2,2], digits = 4)` higher than the group of patients who did not receive RRT (i.e., control group). 
+
+The treatment group was on average `r round(result[["sum.all"]][3,1] - result[["sum.all"]][3,2], digits = 4)` years older than the control group. After matching, however, those differences dramatically reduced as shown in the summary of balance for matched data. The mean difference in AKIN classification between treated and control patients reduced to `r round(result[["sum.matched"]][2,1] - result[["sum.matched"]][2,2], digits = 4)`, and the age difference reduced to `r round(result[["sum.matched"]][3,1] - result[["sum.matched"]][3,2], digits = 4)`, both statistically insignificant. In short, the treated and control patients after matching were very similar now in terms of AKIN classification and age.
+
+
+We can plot the distribution of propensity scores, which is the probability of receiving RRT, in treatment and control groups, to further check the matching performance.
+```{r}
+plot(matching, type = "hist")
+```
+
+
+The histograms before matching on the left differ to a great degree. The histograms after matching on the right are very similar. Both the numerical and visual data show that the matching is successful. We can also look at the jitter plot of the propensity scores.
+```{r}
+plot(matching, type = "jitter")
+```
+
+
+Each circle represents a patient's propensity score. The absence of cases in the uppermost stratification indicates that there are no unmatched treated patients. The middle stratifications show the close match between the treated patients and the matched control patients. The final stratification shows the unmatched patients, whose data will not be used in follow-up analyses.
+
+
+
+# Analyzing Matched Data
+
+
+
+After matching, we can export the matched data to do follow-up analyses.
+```{r}
+rrtMatched = match.data(matching)
+str(rrtMatched)
+```
+
+
+We can confirm that there is the same number of patients who received RRT and patients who did not in the new data frame. Use `table(rrtMatched$RRT)` achieve the same purpose.
+```{r}
+rrtMatched %>% count(RRT)
+```
+
+
+Now let's compare the mortality rates after matching.
+```{r}
+rrtMatched %>%
+  group_by(RRT) %>%
+  summarise(Mean_Mortality = mean(Mortality, na.rm = TRUE))
+```
+
+
+We can observe a significant increase in the mortality rate from the group of matched patients who did not receive RRT compared to the one before matching, `r round(mean(subset(rrt, RRT == 0)$Mortality), digits = 4)`. In other words, non-RRT patients with similar age and AKIN classification as the treated patients had much higher in-hospital mortality among the group of all non-RRT patients.
+
+
+We can use the t-test to check whether the difference in mortality rates between these two groups of patients is significant or not.
+```{r}
+t.test(rrtMatched$Mortality ~ rrtMatched$RRT)
+```
+
+
+We can see from the large p-value that the difference in mortality rates is not statistically significant. This result suggests that after controlling for age and AKIN classification, RRT is not significantly associated with change in in-hospital mortality, which is a dramatically different conclusion made based on simple statistics. Can we conclude that RRT does not make any difference? We will continue the discussion in class. 
+
+We have not used SOFA as a matching variable. Here we evaluate if there are any other unobserved variables that could have an association with RRT and mortality. We use the MASS package for the GLM model `glm`. GLM is powerful as it includes many different models in the exponential family, including the `probit`, `logit`, etc models defined by the link function.
+
+```{r}
+library(MASS)
+
+# Probit model for mortality
+probitModel_Mortality <- glm(Mortality ~ SOFA, data = rrtMatched, family = binomial(link = "probit"))
+summary(probitModel_Mortality)
+```
+SOFA has significant effects on **Mortality**. Next we evaluate the effects on RRT initiation.
+
+```{r}
+probitModel_RRT <- glm(RRT ~ SOFA, data = rrtMatched, family = binomial(link = "probit"))
+summary(probitModel_RRT)
+```
+
+Similarly, SOFA as a confounder that is excluded from the matching has significant positive effects on **RRT initiation**.
+
+# Troubleshooting
+
+
+
+If your package installation fails with the following error message:
+```
+Warning in install.packages :
+  unable to access index for repository https://cran.rstudio.com/src/contrib:
+  cannot open URL 'https://cran.rstudio.com/src/contrib/PACKAGES'
+```
+you may need to set a default CRAN mirror by typing the following command in your R Console:
+```
+options(repos = c(CRAN = "http://cran.rstudio.com"))
+```
+
+
