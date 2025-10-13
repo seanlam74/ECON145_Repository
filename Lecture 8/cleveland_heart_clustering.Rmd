@@ -1,0 +1,504 @@
+---
+title: "Segmentation of Heart Patients using Clustering"
+author: "ECON145 Instructor"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: TRUE
+    number_sections: true
+    theme: readable
+    df_print: paged
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r global-options, echo = FALSE, message = FALSE}
+knitr::opts_chunk$set(warning = FALSE, 
+                      fig.height = 6,
+                      fig.width = 6,
+                      fig.align = "center")
+```
+You may need to install the packages before starting this exercise.
+In your R console, type each of these commands prior to starting this exercise.
+
+* install.packages("dplyr")
+
+* install.packages("fastDummies")
+
+* install.packages("factoextra")
+
+* install.packages("cluster")
+
+
+```{r}
+library(dplyr)
+
+```
+# Data Loading and Exploration
+
+## Reading the dataset from file
+Let us first read the dataset from the file. This is a database of heart patients with 10 attributes. The original (Cleverland) dataset has 76 attributes and is published in UCI database https://archive.ics.uci.edu/ml/datasets/heart+Disease. The version we are using is a modified version downloaded from Kaggle https://www.kaggle.com/ronitf/heart-disease-uci to serve the purpose for our exercise. This dataset released to you has also been further cleaned and modified. In particular, some columns have been dropped.
+
+```{r}
+heartdata <- read.csv("heart.csv")
+str(heartdata)
+```
+
+## Summary Statistics of Data
+We will take a look at our data using the 'summary' function. 
+```{r}
+summary(heartdata)
+```
+
+
+## Use meaningful categorical values 
+We know that variables sex, fasting blood sugar fbs [if > 120 mg/dl (1 = true; 0 = false)], exang (1 = true; 0 = false for exercise induced angina), chest pain cp (4 types) and resting ECG (3 types) are categorical variables. 
+
+The following segment of code may look daunting (don't worry, we are not expecting you to be able to code it without reference), it is to convert the numerical values back to categorical to give meaningful category names in the data. 
+
+While we can also use as.factor function to convert them from numerical form to categorical, using meaningful category names will generate meaningful name when we are generating dummy variables.
+
+Let's take cp (chest pain) as an example. If the variable is to be left as factors (coded by numeric numbers), the dummy variables generated will be left as "0", "1", "2" and "3". This is hard to interpret. However, if we use meaningful category names, the dummy variables can be renamed as TYPICAL_ANGINA, ATYPICAL_ANGINAL, NON_ANGINAL and ASYMPOTMATIC which are more interpretable. 
+
+The last select statement of the above chunk rearranges the columns to have the categorical variables first, followed by the numerical ones. 
+
+
+```{r}
+heartdata <- heartdata %>% 
+  mutate(sex = if_else(sex == 1, "MALE", "FEMALE"),
+         fbs = if_else(fbs == 1, ">120", "<=120"),
+         exang = if_else(exang == 1, "YES" ,"NO"),
+         cp = if_else(cp == 0, "TYPICAL_ANGINA",
+                      if_else(cp == 1, "ATYPICAL_ANGINA",
+                      if_else(cp == 2, "NON_ANGINAL", "ASYMPTOMATIC"))),
+         restecg = if_else(restecg == 0, "NORMAL",
+                           if_else(restecg == 1, "ABNORMALITY", "PROBABLE OR DEFINITE"))
+         ) %>% 
+  mutate_if(is.character, as.factor) %>% 
+  dplyr::select(sex, fbs, exang, cp, restecg, everything()) # rearrange the columns to have the categorical variables first
+
+heartdata
+
+```
+
+Take a look at the summary again. Take note of how categorical data columns have been meaningfully described. 
+```{r}
+summary(heartdata)
+```
+
+# Exploratory Data Analysis
+
+## Check for extreme outliers and distributions of the numeric variables.
+
+First, look at the presence of outliers using boxplot. 
+From the results, we can see that there is an extreme outlier. We can consider removing the outlier later. 
+
+```{r}
+
+# Specify which column to plot specifically as we use only the numerical columns
+boxplot(heartdata[,c("age", "trestbps", "chol", "thalach", "oldpeak")])
+
+# Alternatively, you can plot for column 6 to 10
+#boxplot(heartdata[,6:10])
+
+```
+
+Now, explore the distributions of the numerical variables for skewness which might affect the clustering algorithm.
+
+We shall plot the histograms to serve this purpose. There are no skewness involving large magnitudes in all the variables (perhaps except for the outlier in variable chol).
+
+```{r}
+col <- c("age", "trestbps", "chol", "thalach", "oldpeak")
+for (c in col) {
+  hist(heartdata[,c], xlab = c, main = paste("Histogram of " , c))  
+}
+
+```
+
+# Data Preparation
+
+## Handling outlier
+```{r}
+
+# Removing the outlier
+heartdata <- subset(heartdata, chol!= 564)
+str(heartdata) 
+```
+
+## Standardize the variables
+
+The scale() function uses z-score method. We can also write a function to execute min-max to normalize the data to 0 and 1. 
+```{r}
+#standardize the variable using z-score
+std_heartdata <- heartdata %>%
+   mutate_at(c("age", "trestbps", "chol", "thalach", "oldpeak"), list(~c(scale(.))))
+std_heartdata
+
+# Code for min-max method
+nom_heartdata <- heartdata %>%
+                mutate_at(c("age", "trestbps", "chol", "thalach", "oldpeak"), c(function(x) (x-min(x))/(max(x)-min(x))))
+nom_heartdata
+
+```
+
+# CLUSTERING MODELS
+
+* Model I use k-means for numeric columns for meaningful results. Categorical variables are discrete and do not have any natural origin. Computing Euclidean distance for such variables is generally not as meaningful for categorical variables.
+
+* Model II shows how k-means can be used (with caution) for mixed data types (numeric and categorical)
+
+## Modeling I
+
+### Using K-means clustering
+
+Now run k-means algorithm using the kmeans() function in R. 
+
+*k value is first set to 2. 
+
+*The nstart option attempts multiple initial configurations and reports on the best one within the k-means function.  For example, adding nstart=25 will generate 25 initial random centroids and choose the best one for the algorithm. 
+
+*Seeds allow you to create a starting point for randomly generated numbers, so that each time your code is run, the same result is produced.
+
+*Note: The codes for using the normalized variables have been commented. 
+
+```{r}
+set.seed(20)
+k2 <- kmeans(std_heartdata[,6:10], center=2, iter.max = 10, nstart=25)
+k2
+
+# You may also use the normalized dataset (the result is slightly different). 
+#k2_nom <- kmeans(nom_heartdata[,6:10], center=2, nstart=25)
+#k2_nom
+```
+```{r}
+str(k2)
+k2$withinss
+k2$betweenss
+```
+
+Each observation is now assigned a cluster number as the clustering vector in the output console. 
+
+The kmeans() function returns a list of components, including:
+
+*cluster: A vector of integers (from 1:k) indicating the cluster to which each point is allocated
+
+*centers: A matrix of cluster centers (cluster means)
+
+*totss: The total sum of squares (TSS), i.e ∑(x_i−x¯)2. TSS measures the total variance in the data.
+
+*withinss: Vector of within-cluster sum of squares, one component per cluster
+
+*tot.withinss: Total within-cluster sum of squares, i.e. sum(withinss)
+
+*betweenss: The between-cluster sum of squares, i.e., totss−tot.withinss
+
+*size: The number of observations in each cluster
+
+Interpreting the results above, the K-means clustering algorithm returned 2 clusters of sizes 172 (cluster 1) and 130 (cluster 2). The cluster means are the cluster centroids. The within-cluster-sum-of-squares are used to evaluate similarities within the clusters. 
+
+Take a look at the calculation of between_SS / total_SS. This percentage is a measure of the total variance in your data set that is explained by the clustering. k-means minimize the within group dispersion and maximize the between-group dispersion. By assigning the samples to k clusters rather than n (no clustering) clusters achieved a reduction in sums of squares of (between_SS/ total_SS) %.
+
+Reference: https://www.rdocumentation.org/packages/stats/versions/3.6.1/topics/kmeans
+
+
+Let's add cluster assignment into the data frame for further use. 
+```{r}
+std_heartdata <- data.frame(std_heartdata, k2$cluster)
+std_heartdata
+```
+
+
+## Evaluation
+
+### Analysis of output
+
+**Question:** What is the cluster distribution? Are the observations well distributed across clusters?
+```{r}
+k2$size
+
+```
+Cluster sizes are quite comparable in our scenario. In general segmentation exercise, we prefer cluster sizes which are generally about the same. However, in specific cases where we want to use clustering to identify outlier group, then it is fine to have imbalanced cluster size with one of the clusters being the outlier group which is usually smaller in size compared to the size of the other clusters.
+
+**Question:** Which cluster is most homogeneous?
+
+```{r}
+k2$withinss
+```
+	
+Since within-cluster sum of squares calculates the sum of square within each cluster, cluster 1 is more homogeneous. 
+
+When using clustering, the goal is usually to get high similarity within each group, and low similarity between each group. Therefore, we would want to achieve low variations within the clusters, i.e., within_SS.
+
+
+**Question:** To what extend, the clusters can explain the variance of the data? 
+
+```{r}
+print(paste("Between_SS = ", k2$betweenss))
+print(paste("Total_within_SS = ", k2$tot.withinss))
+print(paste("Total_SS = ", k2$totss))
+
+# Checking the total SS
+s = k2$betweenss + k2$tot.withinss
+print(paste("Check: Total_SS = ", s))
+
+
+# between_SS over total_SS
+btw = k2$betweenss / k2$totss
+print(paste("Between_SS / Total_SS = ", btw))
+
+```
+
+There isn't a direct measurement for this question. However, we can infer from the other results. The measure between_SS is the between-cluster sum of squares, i.e., totss - tot.withinss. This is to say that if you have not performed clustering, the variance in the data is given by the total_SS (totss). Now that you have the clusters, you can now explain part of the total variance by the variance within each group, given by total_WSS (tot.withinss) and the variance between the groups (betweenss). 
+
+A good clustering result would aim to achieve small fraction of tot.withinss to the total variance in the data, and large fraction of between_ss to the total variance. In short, we do want to achieve a high between_ss/total_ss. 
+
+
+### Profiling the clusters 
+
+**Questions:** What is the profile of each cluster?
+
+Clustering allows us to discover similarities within cluster and differences across clusters. We can use the centroids of the clusters to interpret them. Since they are normal standardized scores, we know that a negative number means that the centroid below the mean and the positive number means the centroid is above the mean. 
+
+```{r}
+k2$centers
+```
+Cluster 1 is characterized by patients whose age, rest bps, choloesterol and ST depression induced by exercise relative to rest (oldpeak) below average. They have higher than average maximum heart rate achieved. The profile of this cluster is likely to be young with less risk of heart disease.
+
+On the other hand, Cluster 2 is characterized by patients whose age, rest bps, chol and oldpeak higher than average. They have lower than average maximum heart rate achieved. The profile of this cluster is likely to be the aged with higher risk of heart disease. 
+
+### Visualizing the clusters
+Let's visualize the outcome of clustering to evaluate how distinct the clusters are. We can make use of fviz_cluster() in factoextra package to visualize the data in a scatter plot with coloring each data point according to its cluster assignment.
+
+The problem is that the data contains more than 2 variables and the question is what variables to choose for the xy scatter plot. A solution is to reduce the number of dimensions by applying a dimensionality reduction algorithm, such as Principal Component Analysis (PCA), that operates on the multiple variables and outputs two new variables (that represent the original variables) that you can use to do the plot.
+
+```{r}
+library(factoextra)
+```
+
+```{r}
+
+fviz_cluster(k2, data = std_heartdata[,6:10])
+
+```
+
+## Finding K
+
+To illustrate how to find the optimal number of k, we can consider using WSS (within sum of square) method by finding the elbow or the Silhouette method. 
+
+Let's first visualize how would it be like if k = 3 to 5.
+
+```{r}
+# Execute kmeans for each k value from 3 to 5 and visualize the clusters. 
+
+k3 <- kmeans( std_heartdata[,6:10], centers = 3, nstart = 25)
+k4 <- kmeans( std_heartdata[,6:10], centers = 4, nstart = 25)
+k5 <- kmeans( std_heartdata[,6:10], centers = 5, nstart = 25)
+
+p1 <- fviz_cluster(k2, geom = "point", data = std_heartdata[,6:10])+
+  ggtitle("k = 2")
+p1
+
+p2 <- fviz_cluster(k3, geom = "point", data = std_heartdata[,6:10])+
+  ggtitle("k = 3")
+p2
+
+p3 <- fviz_cluster(k4, geom = "point", data = std_heartdata[,6:10])+
+  ggtitle("k = 4")
+p3
+
+p4 <- fviz_cluster(k5, geom = "point", data = std_heartdata[,6:10])+
+  ggtitle("k = 5")
+p4
+
+```
+
+### Elbow method (WSS)
+We will use the total within sum of square (i.e., tot.withinss) to compute the optimal number of clusters k. The basic idea behind cluster partitioning methods, such as k-means clustering, is to define clusters such that the total within-cluster variation is minimized with a reasonably number of clusters.  The total within-cluster sum of square (wss) measures the compactness of the clustering and we want it to be as small as possible. The location of a bend (elbow) in the plot is generally considered as an indicator of the appropriate number of clusters.
+
+Reference: https://www.rdocumentation.org/packages/factoextra/versions/1.0.7/topics/fviz_nbclust
+
+Use the reference to understand the parameters and the default values of the parameters. 
+
+```{r}
+# Elbow Method
+set.seed(20)
+fviz_nbclust(std_heartdata[,6:10], kmeans, k.max = 12, method = "wss")
+```
+Sometimes the Elbow method may not give very obvious "elbow". We will consider analysing using Silhouette method.
+
+### Silhouette method
+The average silhouette approach measures combines ideas of both cohesion and separation.  A high average silhouette width indicates a good clustering.
+
+```{r}
+# Average Silouette Method
+fviz_nbclust(std_heartdata[,6:10], kmeans, k.max = 12, method = "silhouette")
+```
+By considering both cohesion and separation of clusters, we can see that a suitable number of clusters is 2. 
+
+## Modeling II
+
+In this section here, we handle the categorical data and convert them to dummy variables so as to be incorporated into the clustering model. 
+
+```{r}
+library(fastDummies)
+```
+
+### Handling categorical variables
+
+Convert some of the categorical variables to dummies.
+
+```{r}
+std_heartdata2 <- fastDummies::dummy_cols(std_heartdata, select_columns= c("sex", "fbs", "exang"), remove_first_dummy = TRUE)
+std_heartdata2 <- fastDummies::dummy_cols(std_heartdata2, select_columns= c("cp", "restecg"), remove_first_dummy = FALSE)
+std_heartdata2$k2.cluster = NULL
+str(std_heartdata2)
+
+```
+### Clustering including encoded variables (from categorical data)
+
+We will run k-means clustering using the numeric variables and the newly created dummy variables
+```{r}
+# Running k-means clustering
+set.seed(20)
+k2_2 <- kmeans(std_heartdata2[,6:20], center=2, nstart=25)
+```
+
+Visualize the clusters. 
+```{r}
+
+fviz_cluster(k2_2, data = std_heartdata2[,6:20])
+
+```
+
+Selection of number of clusters would need to consider both domain knowledge dissimilarity measures such as the Average Silhouette width. 
+
+## Modeling I - Principal Components Analysis
+
+```{r}
+
+# prcomp is PCA with baseR
+pca_result <- prcomp(std_heartdata[,6:10])
+
+X_pca_results <- pca_result$x
+
+# Generate the covariance matrix
+cov_matrix <- cov(std_heartdata[,6:10])
+
+# View the covariance matrix
+print(cov_matrix)
+
+# Compute the eigenvalues and eigenvectors
+eigen_result <- eigen(cov_matrix)
+# Extract eigenvectors
+eigenvectors <- eigen_result$vectors
+# Projection of original data onto the eigenvectors using matrix multiplication
+X_pca_eigen <- as.matrix(std_heartdata[, 6:10]) %*% eigenvectors
+
+# View the eigenvectors
+print(eigenvectors)
+print(head(X_pca_results))
+print(head(X_pca_eigen))
+
+# Compute the proportion of variance explained by each component
+explained_variance <- pca_result$sdev^2 / sum(pca_result$sdev^2)
+
+# Plot the scree plot as a bar chart
+barplot(explained_variance, 
+        main = "Scree Plot", 
+        xlab = "Principal Component", 
+        ylab = "Proportion of Variance Explained", 
+        names.arg = seq_along(explained_variance))
+
+# Compute the cumulative variance explained by the top 2 principal components
+variance_top_2_pc <- sum(explained_variance[1:2])
+
+# Compute the cumulative variance explained by the top 3 principal components
+variance_top_3_pc <- sum(explained_variance[1:3])
+
+# Output the results
+cat("Variance explained by top 2 PCs:", variance_top_2_pc, "\n")
+cat("Variance explained by top 3 PCs:", variance_top_3_pc, "\n")
+```
+
+# Compute the loading for Model I
+
+```{r}
+# Extract the loadings (the eigenvectors) and convert to a data frame
+loadings <- as.data.frame(pca_result$rotation)
+
+# Rename columns to indicate principal components (PC1, PC2, etc.)
+colnames(loadings) <- paste0("PC", 1:ncol(loadings))
+
+# Assign row names as the original variable names (assuming they are column names from std_heartdata)
+rownames(loadings) <- colnames(std_heartdata[, 6:10])
+
+# Print the loadings
+print(loadings)
+
+# Set a threshold for important features
+threshold <- 0.4
+
+# Initialize a list to store important features for each principal component
+important_features <- list()
+
+# Loop through each principal component (column in loadings)
+for (pc in colnames(loadings)) {
+  # Find the indices of features with absolute loadings greater than the threshold
+  important_indices <- abs(loadings[, pc]) > threshold
+  
+  # Extract the feature names and their corresponding loadings (with sign)
+  important_features[[pc]] <- paste(
+    rownames(loadings)[important_indices],  # Feature names
+    ifelse(loadings[important_indices, pc] > 0, "(+)", "(-)")  # Signs of loadings
+  )
+}
+
+# Print important features for each principal component
+for (pc in names(important_features)) {
+  cat(pc, ":", paste(important_features[[pc]], collapse = ", "), "\n")
+}
+```
+
+```{r}
+# Plotting transformed data across PC1 and PC2 with centroids
+k2$centers
+pca_result$x[, 1:2]
+
+# pca_transformed contains only the first 2 PCs
+pca_transformed <- as.data.frame(pca_result$x[, 1:2])  # PC1 and PC2
+
+# Add the cluster assignments from k2 to the PCA-transformed data
+pca_transformed$Cluster <- as.factor(k2$cluster)  # k2$cluster contains the cluster assignments
+
+# Compute the cluster centroids in the PCA space
+centroids <- aggregate(pca_transformed[, 1:2], list(Cluster = k2$cluster), mean)
+
+# Step 4: Plot the transformed data along with the centroids
+ggplot(pca_transformed, aes(x = PC1, y = PC2, color = Cluster)) +
+  geom_point(alpha = 0.7) +  # Plot the data points
+  geom_point(data = centroids, aes(x = PC1, y = PC2), color = "black", size = 5, shape = 8) +  # Plot the centroids
+  labs(title = "PCA Plot with Cluster Centroids (kmeans)", x = "Principal Component 1", y = "Principal Component 2") +
+  theme_minimal()
+
+```
+
+
+## Do-It-Yourself (DIY)
+
+Typically, since we have added new variables, we should redo the k selection exercise and evaluate the performance of the cluster analysis. The steps are the same based on the first model. Please take it as your own practice to execute the k-selection, evaluation and profiling of the clustering results.
+
+# References
+Parts of this exercise is made possible with contributions from Internet resources, including:
+
+* https://archive.ics.uci.edu/ml/datasets/heart+Disease
+
+* https://www.kaggle.com/ronitf/heart-disease-uci
+
+* https://uc-r.github.io/kmeans_clustering
+
+* https://www.datanovia.com/en/lessons/k-means-clustering-in-r-algorith-and-practical-examples/
+
+* https://towardsdatascience.com/clustering-analysis-in-r-using-k-means-73eca4fb7967
+
