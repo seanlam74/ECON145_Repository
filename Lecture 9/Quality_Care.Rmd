@@ -1,0 +1,277 @@
+---
+title: "Quality of Care"
+author: "ECON145"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    theme: readable
+    self_contained: TRUE
+    toc: TRUE
+    number_sections: TRUE
+    df_print: paged
+---
+
+```{r global-options, echo = FALSE, message = FALSE}
+knitr::opts_chunk$set(warning = FALSE, 
+                      fig.height = 6,
+                      fig.width = 6,
+                      fig.align = "center")
+options(digits = 2)
+```
+
+# Loading and Exploring the Data Set
+Let's first read the data set from the file. 
+```{r}
+quality <- read.csv("Quality.csv")
+str(quality)
+```
+
+*MemberID* is the unique identifier that numbers patients from 1 to `r nrow(quality)`. *InpatientDays* is the number of inpatient visits or the number of days that the patient spent in the hospital. *ERVisits* is the number of times the patient visited the emergency room. *OfficeVisits* is the number of times that the patient visited any doctor's office. *Narcotics* is the number of prescriptions that the patient had for narcotics. *DaysSinceLastERVisit* is the number of days between the patient's last emergency room (ER) visit and the end of the study period, and it is set to the length of the study period if they never visited the ER. *Pain* is the number of visits for which the patient complained about pain. *TotalVisits* is the total number of times the patient visited any healthcare provider. *ProviderCount* is the number of providers that served the patient. *MedicalClaims* is the number of days on which the patient had a medical claim. *ClaimLines* is the total number of medical claims. *StartedOnCombination* is whether or not the patient was started on a combination of drugs to treat their diabetes. *AcuteDrugGapSmall* is the fraction of acute drugs that were refilled quickly after the prescription ran out. *PoorCare* is the dependent variable, and is equal to 1 if the patient had poor care, and equal to 0 if the patient had good care.
+
+The following code convert the dependent variable *PoorCare* to a "Factor" variable with labels 'Good' and 'Poor' in R. We do not use the usual type conversion here because it will result in labels '0' and '1', which fail to work in the cross-validation using AUC as the criterion.
+```{r}
+quality$PoorCaref[quality$PoorCare == 0] <- 'Good'
+quality$PoorCaref[quality$PoorCare == 1] <- 'Poor'
+quality$PoorCare = quality$PoorCaref
+quality$PoorCaref <- NULL
+quality$PoorCare <- as.factor(quality$PoorCare)
+str(quality)
+```
+We can see how many patients received poor care and how many patients received good care using the 'table' function.
+```{r}
+table(quality$PoorCare)
+```
+# Splitting the Data Set for Training and Testing
+We will randomly split the data set into a training set and a testing set, using the 'sample.split' function in the "caTools" package.
+```{r echo = TRUE, message = FALSE, warning = FALSE}
+library(caTools)
+```
+
+```{r}
+set.seed(1)
+split <- sample.split(quality$PoorCare, SplitRatio = 0.80)
+train <- subset(quality, split == TRUE)
+test <- subset(quality, split == FALSE)
+```
+
+# Building a Classification and Regression Tree (CART) Model
+## Building a CART Model Using a Given 'minbucket' Value
+Before building our CART model, we need to install and load two new packages, "rpart" and "rpart.plot".
+```{r echo = TRUE, message = FALSE, warning = FALSE}
+library(rpart)
+library(rpart.plot)
+```
+
+Now we are ready to build our model and plot the tree. Note that we do not want to include the unique patient identifier in the set of predictors.
+```{r}
+PCtree <- rpart(PoorCare ~ . - MemberID, data = train, control = rpart.control(minbucket = 5))
+prp(PCtree, extra = 1)  # The `extra = 1` argument adds split details to the nodes
+```
+The last argument in the 'rpart' function defines the 'minbucket' size to control the tree. The 'prp' function will abbreviate the possible values of variables so that they are still uniquely identified.
+
+Let's evaluate the prediction accuracy of our CART model in the training set.
+```{r}
+predictCART <- predict(PCtree, type = "class")
+conf <- table(train$PoorCare, predictCART)
+conf
+```
+The above argument, *type = "class"*, uses a threshold of 0.5 to create the confusion matrix. The accuracy of our CART model is `r round(100*(conf[1] + conf[4])/nrow(train), digits = 2)`%.
+
+If you prefer to use a different threshold, you can ask the 'predict' function to predict the probabilities instead of classes, and then manually set a threshold to create the confusion matrix. In the following code, you can even remove the argument *type = "prob"*, since the default type is probability.
+```{r}
+predictCART2 <- predict(PCtree, type = "prob")
+```
+
+The prediction outcome variable, *predictCART2*, is a `r nrow(train)` by 2 matrix, as checked below.
+```{r}
+dim(predictCART2)
+```
+
+
+Let's take a look at the first 20 rows of *predictCART2*.
+```{r}
+predictCART2
+```
+
+
+The first column is labeled as 0. This is the percentage of training set data having outcome 0 in the same subset (leaf node) as the test set observation. The second column is the percentage of training set data having outcome 1 in the same subset (leaf node) as the test set observation. We could interpret the second column as the probability that the test set observation has outcome 1. Note that the index for each row is not continuous from 1 to 20. Instead, it is the index of each data point in the original dataset before random sampling into training and test sets. In other words, the first case, third case, forth case, etc., of the original dataset are randomly selected to be included in the test set.
+
+
+Now, we can generate the confusion matrix as before by supplying any threshold we want. Using 0.5 as the threshold will recover the confusion matrix we got before with the argument *type = "class"*.
+```{r}
+table(train$PoorCare, predictCART2[,2] > 0.5)
+```
+
+
+We can also generate the ROC curve for our CART model and compute its AUC.
+```{r echo = TRUE, message = FALSE, warning = FALSE}
+library(ROCR)
+```
+
+
+```{r}
+pred <- prediction(predictCART2[,2], train$PoorCare)
+perf <- performance(pred, "tpr", "fpr")
+plot(perf)
+```
+
+
+```{r}
+auc <- performance(pred, "auc")
+auc@y.values[[1]]
+```
+## Using Cross-Validation to Select a Complexity Parameter that can improve the prediction model.
+Let's try cross-validation for our CART model. To do this, we need to install and load two new package, "caret".
+```{r echo = TRUE, message = FALSE, warning = FALSE}
+library(caret)
+```
+
+Now, we will define our cross-validation experiment. First, we define how many folds we want.
+```{r}
+fitControlAcc <- trainControl(method = "cv", number = 5)
+```
+
+The first argument, *method = "cv"*, tells the function to use the cross-validation method.
+
+Next, we need to pick the possible values for our parameter *cp*. We usually do not need to explore the whole range of *cp* values from 0 to 1. In most cases, we only need a small value of *cp*, e.g., from 0.005 through 0.25 with a step size of 0.005.
+```{r}
+cpGridAcc <- expand.grid(.cp = (1:50)*0.005)
+```
+
+Now, we are ready to perform cross-validation. Since there is some random component in $k$-fold cross-validation---random partition into $k$ folds---let's synchronize the results by setting a common random seed first.
+```{r}
+set.seed(1)
+cvResultsAcc <- train(PoorCare ~ . - MemberID, data = train, method = "rpart", trControl = fitControlAcc, tuneGrid = cpGridAcc)
+cvResultsAcc
+```
+
+
+Kappa, often referred to as Cohen's Kappa, is a statistical measure used to evaluate the accuracy of a classification model. Unlike simple accuracy, which compares the overall agreement between the predicted and actual values, Kappa adjusts for the agreement that might happen by chance. This makes it a more robust measure, especially in situations where there is a significant class imbalance (i.e., when one class is much more common than others).
+
+The bottom line from the above output tells the optimal cp value we would like to use to build our CART model. In the following code, the command, *cvResultsAcc["bestTune"]*, gets the optimal cp value from the above cross-validation results. We can also just type `r cvResultsAcc["bestTune"]`.
+
+
+```{r}
+PCtreeCVacc <- rpart(PoorCare ~ . - MemberID, data = train, control = rpart.control(cp = cvResultsAcc["bestTune"]))
+
+prp(PCtreeCVacc, extra = 1)  # The `extra = 1` argument adds split details to the nodes
+```
+
+
+Interestingly, the best tree selected from the cross-validation procedure using the *cp* parameter has only one split on the number of prescriptions for narcotics. 
+
+
+Note that by default, the cross-validation in the 'train' function uses accuracy as the performance measure to pick the optimal cp value. We can also use AUC to replace accuracy in cross-validation, which can be achieved in the following code.
+```{r}
+set.seed(1)
+fitControlAuc <- trainControl(method = "cv", number = 5, classProbs = TRUE, summaryFunction = twoClassSummary)
+cpGridAuc <- expand.grid(.cp = (1:50)*0.005)
+cvResultsAuc <- train(PoorCare ~ . - MemberID, data = train, method = "rpart", trControl = fitControlAuc, tuneGrid = cpGridAuc, metric = "ROC")
+cvResultsAuc
+```
+
+
+Let's train a CART model based on the optimal cp value chosen above using AUC as the criterion.
+```{r}
+PCtreeCVauc <- rpart(PoorCare ~ . - MemberID, data = train, control = rpart.control(cp = cvResultsAuc["bestTune"]))
+prp(PCtreeCVauc, extra = 1)  # The `extra = 1` argument adds split details to the nodes
+```
+
+
+We can observe that different criteria in the cross-validation can potentially result in very different models. 
+
+
+
+# Testing the Out-of-Sample Performance of the Models
+
+
+
+Now, let's test the performance of the above three CART models in the test set.
+```{r}
+predictCART <- predict(PCtree, type = "prob", newdata = test)
+predictCARTcvAcc <- predict(PCtreeCVacc, type = "prob", newdata = test)
+predictCARTcvAuc <- predict(PCtreeCVauc, type = "prob", newdata = test)
+```
+
+
+We can plot their receiver operating characteristic (ROC) curves and compare the areas under the curve (AUC) in the test set.
+```{r echo = TRUE, message = FALSE, warning = FALSE}
+library(ROCR)
+```
+
+
+```{r}
+predCART <- prediction(predictCART[,2], test$PoorCare)
+perfCART <- performance(predCART, "tpr", "fpr")
+plot(perfCART)
+```
+
+
+```{r}
+predCARTcvAcc <- prediction(predictCARTcvAcc[,2], test$PoorCare)
+perfCARTcvAcc <- performance(predCARTcvAcc, "tpr", "fpr")
+plot(perfCARTcvAcc)
+```
+
+
+```{r}
+predCARTcvAuc <- prediction(predictCARTcvAuc[,2], test$PoorCare)
+perfCARTcvAuc <- performance(predCARTcvAuc, "tpr", "fpr")
+plot(perfCARTcvAuc)
+```
+
+
+```{r}
+aucCART <- performance(predCART, "auc")
+aucCART@y.values[[1]]
+aucCARTcvAcc <- performance(predCARTcvAcc, "auc")
+aucCARTcvAcc@y.values[[1]]
+aucCARTcvAuc <- performance(predCARTcvAuc, "auc")
+aucCARTcvAuc@y.values[[1]]
+```
+
+
+Unsurprisingly, the optimal tree trained using cross-validation with AUC as the criterion performs the best in terms of out-of-sample AUC. Comparing the in-sample AUC with the out-of-sample AUC of our first CART model, we can see a clear overfitting problem from the significant drop in the out-of-sample AUC.
+
+
+
+# Building a Random Forest Model
+
+
+
+We first need to install and load a new package, called "randomForest".
+```{r echo = TRUE, message = FALSE, warning = FALSE}
+library(randomForest)
+```
+
+
+Now let's try to build a random forest model and compute its out-of-sample AUC.
+```{r warning = TRUE}
+set.seed(1)
+PCforest <- randomForest(PoorCare ~ . - MemberID, data = train, ntree = 200, mtry = 3)
+```
+
+
+```{r}
+predictForest <- predict(PCforest, type = "prob", newdata = test)
+predForest <- prediction(predictForest[,2], test$PoorCare)
+aucForest <- performance(predForest, "auc")
+aucForest@y.values[[1]]
+```
+
+
+We can see a significant boost in the prediction performance from the random forest model.
+
+
+
+# Troubleshooting
+
+
+
+You may need to additionally install and load these two packages, "class" and "plotting2," for cross-validation to work if they are not loaded automatically. If you receive an error message after trying to load "caret" and "e1071", please try installing and loading these two additional packages.
+
+
+When you try to install the package "randomForest", if you get an installation warning that says: *"Warning: cannot remove prior installation of packages 'randomForest'"*, please try quitting and re-starting R. 
+
+
+
