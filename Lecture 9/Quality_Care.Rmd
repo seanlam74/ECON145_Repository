@@ -65,7 +65,7 @@ library(rpart.plot)
 Now we are ready to build our model and plot the tree. Note that we do not want to include the unique patient identifier in the set of predictors.
 ```{r}
 PCtree <- rpart(PoorCare ~ . - MemberID, data = train, control = rpart.control(minbucket = 5))
-prp(PCtree, extra = 1)  # The `extra = 1` argument adds split details to the nodes
+prp(PCtree, extra = 2)  # The `extra = 2` argument adds split details to the nodes
 ```
 The last argument in the 'rpart' function defines the 'minbucket' size to control the tree. The 'prp' function will abbreviate the possible values of variables so that they are still uniquely identified.
 

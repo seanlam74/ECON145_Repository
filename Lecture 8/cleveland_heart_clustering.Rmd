@@ -165,7 +165,7 @@ Now run k-means algorithm using the kmeans() function in R.
 
 ```{r}
 set.seed(20)
-k2 <- kmeans(std_heartdata[,6:10], center=2, iter.max = 10, nstart=25)
+k2 <- kmeans(std_heartdata[,6:10],  center=2,iter.max = 10, nstart=25)
 k2
 
 # You may also use the normalized dataset (the result is slightly different). 
@@ -174,7 +174,7 @@ k2
 ```
 ```{r}
 str(k2)
-k2$withinss
+k2$totss
 k2$betweenss
 ```
 
