@@ -174,7 +174,7 @@ cvResultsAuc
 Let's train a CART model based on the optimal cp value chosen above using AUC as the criterion.
 ```{r}
 PCtreeCVauc <- rpart(PoorCare ~ . - MemberID, data = train, control = rpart.control(cp = cvResultsAuc["bestTune"]))
-prp(PCtreeCVauc, extra = 1)  # The `extra = 1` argument adds split details to the nodes
+prp(PCtreeCVauc, extra = 2)  # The `extra = 1` argument adds split details to the nodes
 ```
 
 
