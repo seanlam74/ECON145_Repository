@@ -246,6 +246,9 @@ library(randomForest)
 
 
 Now let's try to build a random forest model and compute its out-of-sample AUC.
+**mtry parameter**: Number of variables available for splitting at each tree node
+**ntree*: Number of trees
+
 ```{r warning = TRUE}
 set.seed(1)
 PCforest <- randomForest(PoorCare ~ . - MemberID, data = train, ntree = 200, mtry = 3)
